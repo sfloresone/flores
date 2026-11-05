@@ -1,0 +1,39 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const sections = [
+  { name: "Fundamentos", description: "Colores, tipografía, espaciado y movimiento." },
+  { name: "Componentes", description: "Botones, tarjetas, navegación y otros elementos de interfaz." },
+  { name: "Documentación", description: "Bloques de código, avisos y contenido educativo." },
+  { name: "Benchmarks", description: "Tablas, gráficas y metadatos de las mediciones." },
+  { name: "Experiencias", description: "Onboarding, composiciones y prototipos de interacción." },
+];
+---
+
+<BaseLayout title="Catálogo de desarrollo · flores" description="Directorio local de diseño y componentes de flores.">
+  <main class="mx-auto max-w-4xl px-6 py-16">
+    <header class="max-w-2xl space-y-4">
+      <p class="text-sm tracking-wide text-muted uppercase">flores / desarrollo</p>
+      <h1 class="text-4xl font-semibold tracking-tight">Catálogo de componentes</h1>
+      <p class="leading-relaxed text-muted">
+        Espacio de trabajo local para explorar y revisar juntos los fundamentos,
+        componentes y experiencias de la web. Todavía no hay diseños aprobados.
+      </p>
+      <p class="text-sm text-muted">Esta página solo está disponible en el servidor de desarrollo.</p>
+    </header>
+
+    <nav aria-label="Secciones del catálogo" class="mt-12">
+      <h2 class="text-xl font-semibold">Índice provisional</h2>
+      <ul class="mt-4 divide-y divide-ink/10 border-y border-ink/10">
+        {sections.map((section) => (
+          <li class="py-5">
+            <h3 class="font-semibold">{section.name}</h3>
+            <p class="mt-1 text-sm text-muted">{section.description}</p>
+            <p class="mt-2 text-xs text-muted">Pendiente de revisión</p>
+          </li>
+        ))}
+      </ul>
+    </nav>
+    <a class="mt-10 inline-block underline underline-offset-4" href="/">Volver al inicio</a>
+  </main>
+</BaseLayout>
