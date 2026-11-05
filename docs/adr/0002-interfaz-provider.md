@@ -1,6 +1,6 @@
 # 0002. Interfaz del proveedor de modelos
 
-- **Estado:** Propuesta. Pregunta abierta: SDK oficial o `net/http` propio (abajo).
+- **Estado:** Aceptada. La pregunta abierta (SDK o `net/http`) se cerró a favor de `net/http` propio; ver abajo.
 - **Fecha:** 2026-11-05
 
 ## Contexto
@@ -59,15 +59,17 @@ type Provider interface {
 }
 
 type Request struct {
-    Model     string     // por petición: sin estado mutable
-    System    string
-    Messages  []Message
-    Tools     []ToolDef  // ordenadas por nombre: bytes estables para la caché
-    MaxTokens int
+    Model      string     // por petición: sin estado mutable
+    System     string
+    Messages   []Message
+    Tools      []ToolDef  // ordenadas por nombre: bytes estables para la caché
+    ToolChoice ToolChoice // Auto (por defecto) | None: el paso de resumen (ADR 0003)
+    MaxTokens  int
 }
 
 type Event struct {
-    Kind     EventKind   // TextDelta | ToolCall | Done
+    Kind     EventKind   // Sent | TextDelta | ToolCall | Done
+    Bytes    int         // en Sent: tamaño del cuerpo enviado (request_bytes)
     Text     string
     ToolCall *ToolCall   // completa: el adaptador ensambla los fragmentos
     Usage    Usage       // en Done
@@ -107,9 +109,24 @@ Las decisiones de diseño:
    - La Responses API se añadirá solo si un benchmark demuestra que hace falta
      (por ejemplo, para el razonamiento de los modelos `gpt-6.x`).
 
-## Pregunta abierta: ¿SDK oficial o `net/http` propio?
+## SDK oficial o `net/http` propio: decidido, `net/http`
 
-**Recomendación: `net/http` propio, sin SDKs.**
+Esta sección empezó como pregunta abierta. Se cerró el 2026-11-05 tras mirar qué
+hay **dentro** del adaptador en cada referencia. La interfaz propia es lo que da
+la independencia del proveedor; el SDK o el `net/http` solo deciden qué hay
+detrás de ella:
+
+| Proyecto | Dentro del adaptador |
+|---|---|
+| byoharness (cap. 3) | SDK oficial (`client.Messages.New`, `openai.NewClient`) |
+| crush → fantasy | SDK oficiales: `anthropic-sdk-go`, un fork de `openai-go`, `genai` |
+| Pi (`pi-ai`) | SDK oficiales: `@anthropic-ai/sdk`, `openai`, `@google/genai` |
+| opencode (`packages/ai`) | protocolo propio, un fichero por protocolo, sin SDK de modelos |
+| fx | HTTP y SSE propios; habla Chat Completions y Responses, y llega a Claude a través del AI Gateway de Vercel |
+
+**Decisión: `net/http` propio, un paquete por protocolo** (como opencode y fx).
+El primero es `anthropic` (Messages API); `openai` (Chat Completions y
+compatibles) llega en el hito M1. Los motivos:
 
 - **Es el objetivo educativo:** ver el protocolo real (SSE, `tool_calls`,
   `tool_use`). Ya lo hicimos así en el mock y en el stub.
@@ -120,9 +137,9 @@ Las decisiones de diseño:
   si la decisión fue buena.
 
 A favor de los SDKs: cubren los casos raros del protocolo y se actualizan solos
-cuando cambia la API. Lo que cuestan está pendiente de medir. Para decidir con
-datos, la idea es hacer un prototipo del adaptador `anthropic` de las dos formas
-y compararlas en tamaño de binario, `perf-startup` y líneas de código.
+cuando cambia la API. Aceptamos ese coste: los cambios de protocolo nos tocará
+seguirlos a nosotros, y los escenarios de la capa B contra el mock avisarán si
+algo se rompe.
 
 ## Alternativas descartadas
 
