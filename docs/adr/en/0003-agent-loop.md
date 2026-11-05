@@ -39,9 +39,14 @@ What we learned:
    **step** is one model call. A turn has one or more steps. The flag is
    `--max-steps` and the trajectory uses `step` (`trajectory/v1`).
 3. **The loop is our own code**, in the style of fantasy: readable top to bottom
-   and with no libraries. It lives in `internal/agent` and exposes
-   `Run(ctx, cfg, prompt) iter.Seq2[Event, error]`, like the provider
-   ([ADR 0002](0002-provider-interface.md)).
+   and with no libraries. It lives in `internal/agent`:
+   - an `Agent` is one conversation and keeps the history between turns (the
+     REPL will use it);
+   - `(*Agent).Run(ctx, prompt) iter.Seq[Event]` runs one turn. The last event
+     is always `Done`, with the result and the error, if any. It is a `Seq`
+     rather than a `Seq2` like the provider's
+     ([ADR 0002](0002-provider-interface.md)) so the error arrives in one
+     place only.
 4. **Step limit: 0 by default, meaning no limit**, like the four references.
    `--max-steps N` turns it on for whoever wants it.
 5. **Repetition detection, always on.** It is the default brake against endless

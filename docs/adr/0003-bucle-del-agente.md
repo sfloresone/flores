@@ -40,9 +40,14 @@ Lo que aprendimos:
    final. Un **paso** es una llamada al modelo. Un turno tiene uno o más pasos.
    El flag es `--max-steps` y la trayectoria usa `step` (`trajectory/v1`).
 3. **El bucle es código propio**, al estilo de fantasy: legible de arriba abajo y
-   sin librerías. Vive en `internal/agent` y expone
-   `Run(ctx, cfg, prompt) iter.Seq2[Event, error]`, igual que el proveedor
-   ([ADR 0002](0002-interfaz-provider.md)).
+   sin librerías. Vive en `internal/agent`:
+   - un `Agent` es una conversación y guarda el historial entre turnos (lo
+     usará el REPL);
+   - `(*Agent).Run(ctx, prompt) iter.Seq[Event]` ejecuta un turno. El último
+     evento siempre es `Done`, con el resultado y el error si lo hubo. Es un
+     `Seq` y no un `Seq2` como el del proveedor
+     ([ADR 0002](0002-interfaz-provider.md)) para que el error llegue por un
+     solo sitio.
 4. **Límite de pasos: 0 por defecto, es decir, sin límite**, como los cuatro de
    referencia. `--max-steps N` lo activa para quien lo quiera.
 5. **Detección de repeticiones, siempre activa.** Es el freno por defecto contra
