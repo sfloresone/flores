@@ -47,7 +47,7 @@ def test_hello_trajectory_is_valid():
         assert trajectory.validate(events) == []
         summary = trajectory.summarize(events)
         assert summary["status"] == "success"
-        assert summary["turns"] == 1
+        assert summary["steps"] == 1
         assert summary["usage"]["output_tokens"] > 0
         # The mock saw exactly what the stub reported sending.
         (rec,) = mock.requests()
@@ -63,9 +63,9 @@ def test_tool_loop_scenario(tmp_path):
         events = events_of(res.stdout)
         assert trajectory.validate(events) == []
         s = trajectory.summarize(events)
-        assert s["turns"] == 2
+        assert s["steps"] == 2
         assert s["tool_calls"] == 1 and s["tool_errors"] == 1
-        assert [r["turn"] for r in mock.requests()] == [0, 1]
+        assert [r["step"] for r in mock.requests()] == [0, 1]
 
 
 def test_provider_error_is_reported(tmp_path):

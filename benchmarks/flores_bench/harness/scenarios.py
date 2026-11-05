@@ -32,7 +32,7 @@ EXPECT_KEYS = {
     "exit",  # "zero" | "nonzero" | "any"
     "stdout_contains",  # [str]
     "llm_requests",  # {"min": n, "max": n}
-    "retries",  # {"min": n, "max": n}  requests beyond the first one of each turn
+    "retries",  # {"min": n, "max": n}  requests beyond the first one of each step (model call)
     "tool_results",  # {"min": n, "max": n} max tool outputs sent back in one request
     "request_contains",  # [str] some request body sent to the model contains it
     "max_wall_ms",  # number

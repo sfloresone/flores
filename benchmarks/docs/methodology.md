@@ -90,7 +90,7 @@ el porqué de cada uno: [harness-scenarios.md](harness-scenarios.md).
 Cómo se juzga:
 
 - **Solo desde fuera**: código de salida, stdout y lo que el mock observa
-  (peticiones, reintentos por turno, resultados de tool devueltos y el cuerpo
+  (peticiones, reintentos por paso, resultados de tool devueltos y el cuerpo
   de cada petición). Así el mismo escenario juzga a flores y a cualquier
   competidor, sin depender de su formato interno.
 - **Prueba de ejecución real**: los comandos imprimen un marcador calculado
@@ -99,7 +99,7 @@ Cómo se juzga:
 - **Tool calls canónicas**: el guion escribe `{"shell": "…"}` y cada adaptador
   lo traduce a su tool (`Bash`, `bash`, `shell`). Si no se conoce la traducción,
   el escenario es "no aplicable" (—), nunca un fallo.
-- **Fallos con estado**: el mock cuenta los intentos por turno, así que puede
+- **Fallos con estado**: el mock cuenta los intentos por paso, así que puede
   fallar las N primeras veces (`fail_first`) o cortar el stream solo en el
   primer intento (`truncate`) y comprobar que el agente se recupera.
 - Para agentes que emiten trayectoria (flores, flores-stub) se valida además

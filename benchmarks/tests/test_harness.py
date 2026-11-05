@@ -16,7 +16,7 @@ def obs(**kw) -> Observation:
         text="Done.",
         llm_requests=2,
         retries=0,
-        max_turn=1,
+        max_step=1,
         tool_results=1,
         truncated=0,
         statuses=[200, 200],

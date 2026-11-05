@@ -29,8 +29,9 @@ type RequestInfo struct {
 	ToolsBytes   int      `json:"tools_bytes"`
 	// ToolResults counts tool outputs the harness sends back to the model.
 	ToolResults int `json:"tool_results"`
-	// Turn is the number of assistant turns already present in the request.
-	Turn int `json:"turn"`
+	// Step is the 0-based index of the model call this request is: the number
+	// of assistant messages already in its history. It selects the scenario step.
+	Step int `json:"step"`
 }
 
 func inspect(proto Protocol, body []byte) (RequestInfo, error) {
@@ -69,7 +70,7 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 			}
 			flags[i] = m.Role == "assistant"
 		}
-		info.Turn = countRuns(flags)
+		info.Step = countRuns(flags)
 
 	case ProtoAnthropic:
 		info.SystemBytes = contentBytes(req["system"])
@@ -90,7 +91,7 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 				}
 			}
 		}
-		info.Turn = countRuns(flags)
+		info.Step = countRuns(flags)
 
 	case ProtoResponses:
 		info.SystemBytes = contentBytes(req["instructions"])
@@ -130,7 +131,7 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 				flags[i] = true
 			}
 		}
-		info.Turn = countRuns(flags)
+		info.Step = countRuns(flags)
 	}
 	return info, nil
 }
@@ -183,7 +184,7 @@ func contentBytes(raw json.RawMessage) int {
 	return 0
 }
 
-// countRuns counts maximal runs of true values. An assistant turn that emits
+// countRuns counts maximal runs of true values. An assistant step that emits
 // several parallel tool calls appears as consecutive items, so it counts once.
 func countRuns(flags []bool) int {
 	n, prev := 0, false

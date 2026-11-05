@@ -68,7 +68,7 @@ def run_one(agent: AgentConfig, scenario: Scenario) -> Observation:
             traj_errors = parse_errors + (trajectory.validate(events) if events else ["no events"])
             text = _final_text(events)
 
-    turns = {r.get("turn", 0) for r in llm}
+    steps = {r.get("step", 0) for r in llm}
     return Observation(
         exit_code=proc.exit_code,
         timed_out=proc.timed_out,
@@ -76,8 +76,8 @@ def run_one(agent: AgentConfig, scenario: Scenario) -> Observation:
         rss_mb=proc.rss_mb,
         text=text,
         llm_requests=len(llm),
-        retries=len(llm) - len(turns),
-        max_turn=max(turns, default=0),
+        retries=len(llm) - len(steps),
+        max_step=max(steps, default=0),
         tool_results=max((r.get("tool_results", 0) for r in llm), default=0),
         truncated=sum(1 for r in llm if r.get("truncated")),
         statuses=[r.get("status", 0) for r in llm],

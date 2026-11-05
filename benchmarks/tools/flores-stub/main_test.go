@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// fakeChat answers turn 1 with a tool call and turn 2 with text.
+// fakeChat answers step 1 with a tool call and step 2 with text.
 func fakeChat(t *testing.T) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -55,8 +55,8 @@ func TestRunJSONL(t *testing.T) {
 		types = append(types, ev["type"].(string))
 		last = ev
 	}
-	want := "session.start turn.start llm.request llm.response tool.call tool.result " +
-		"turn.start llm.request llm.response message session.end"
+	want := "session.start step.start llm.request llm.response tool.call tool.result " +
+		"step.start llm.request llm.response message session.end"
 	if got := strings.Join(types, " "); got != want {
 		t.Errorf("events:\n got %s\nwant %s", got, want)
 	}
@@ -71,12 +71,12 @@ func TestRunJSONL(t *testing.T) {
 	}
 }
 
-func TestMaxTurnsAndProviderError(t *testing.T) {
+func TestMaxStepsAndProviderError(t *testing.T) {
 	srv := fakeChat(t)
 	defer srv.Close()
 	var out, errOut bytes.Buffer
-	if code := run([]string{"run", "--base-url", srv.URL, "--max-turns", "1", "hi"}, nil, &out, &errOut); code != exitLimit {
-		t.Errorf("max turns exit %d", code)
+	if code := run([]string{"run", "--base-url", srv.URL, "--max-steps", "1", "hi"}, nil, &out, &errOut); code != exitLimit {
+		t.Errorf("max steps exit %d", code)
 	}
 
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

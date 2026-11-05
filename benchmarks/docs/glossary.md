@@ -25,15 +25,19 @@ parte que controlamos.
 **Tool.** Una acción que el modelo puede pedir: ejecutar un comando, leer un
 fichero, editar un fichero. El modelo solo *pide*; la ejecuta el harness.
 
-**Turno.** Una vuelta del bucle: una llamada al modelo.
+**Paso.** Una vuelta del bucle: una llamada al modelo (en inglés, *step*).
+
+**Turno.** Lo que pasa entre un mensaje del usuario y la respuesta final. Un
+turno tiene uno o más pasos: el modelo puede pedir tools varias veces antes de
+contestar. Ver [ADR 0003](../../docs/adr/0003-bucle-del-agente.md).
 
 **Contexto.** Todo lo que el modelo ve en cada llamada: instrucciones, historial y
-resultados de las tools. Crece con cada turno, y enviarlo cuesta tiempo y dinero.
+resultados de las tools. Crece con cada paso, y enviarlo cuesta tiempo y dinero.
 
 **System prompt.** Las instrucciones fijas que el harness envía siempre al
 principio. Cuanto más largo, más cuesta cada sesión.
 
-**Headless.** Modo sin interfaz: `flores run --prompt "..."` hace la tarea, escribe
+**Headless.** Modo sin interfaz: `flores -p "..."` hace la tarea, escribe
 el resultado y sale. Es lo que necesitamos para poder medirlo.
 
 ## El banco de pruebas

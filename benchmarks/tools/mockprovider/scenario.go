@@ -9,7 +9,7 @@ import (
 )
 
 // Scenario is a deterministic script of model responses. The mock picks the
-// step by counting how many assistant turns the incoming request already
+// step by counting how many assistant messages the incoming request already
 // contains, so it is stateless and safe for concurrent clients: a fresh
 // conversation always gets step 0, its second request step 1, and so on.
 type Scenario struct {
@@ -184,11 +184,11 @@ func (s *Scenario) validate() error {
 	return nil
 }
 
-// pick returns the step for a conversation that already has `turn` assistant
-// turns, or nil when the scenario is exhausted and after_last is "error".
-func (s *Scenario) pick(turn int) *Step {
-	if turn < len(s.Steps) {
-		return &s.Steps[turn]
+// pick returns the scenario step for request number `step` (0-based) of a
+// conversation, or nil when the scenario is exhausted and after_last is "error".
+func (s *Scenario) pick(step int) *Step {
+	if step < len(s.Steps) {
+		return &s.Steps[step]
 	}
 	if s.AfterLast == "error" {
 		return nil

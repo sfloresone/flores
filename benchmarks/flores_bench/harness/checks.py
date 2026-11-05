@@ -14,7 +14,7 @@ class Observation:
     text: str  # stdout, or final_text for trajectory agents
     llm_requests: int
     retries: int
-    max_turn: int
+    max_step: int
     tool_results: int
     truncated: int
     statuses: list[int]
