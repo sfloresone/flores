@@ -1,0 +1,31 @@
+# Layer C campaigns: which agent runs which model, through which API.
+#
+# Model tiers (decided 2026-11-05): cheap models for day-to-day runs, frontier
+# models only for occasional checkpoints. Each agent is paired with the same
+# model as the others on that provider, so comparisons are paired.
+#
+# Prices live in pricing.json; the meter refuses any model not priced there.
+# Agent versions come from suites/perf/agents.toml (single source of truth).
+
+[tiers.cheap]
+anthropic = "claude-haiku-5-5"
+openai = "gpt-5.4-mini"
+
+[tiers.frontier]
+anthropic = "claude-sonnet-5-5"
+openai = "gpt-6.1-sol"
+
+# api_format per provider, as Harbor names it. The meter exposes /anthropic and
+# /openai; Harbor points each agent at the right one with --base-url.
+[agents.claude-code]
+providers = { anthropic = "anthropic_messages" }
+
+[agents.codex]
+providers = { openai = "openai_responses" }
+
+[agents.pi]
+providers = { anthropic = "anthropic_messages", openai = "openai_responses" }
+
+[agents.fx]
+# Harbor's fx adapter only speaks Chat Completions.
+providers = { openai = "openai_chat_completions" }

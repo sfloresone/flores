@@ -1,0 +1,17 @@
+{
+  "name": "flores",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "dev": "bun --filter './apps/*' dev",
+    "dev:web": "bun --filter @flores/web dev",
+    "build": "bun --filter './apps/*' build",
+    "typecheck": "bun --filter '*' typecheck"
+  },
+  "overrides": {
+    "@emnapi/runtime": "1.11.3",
+    "@emnapi/core": "1.11.3"
+  }
+}

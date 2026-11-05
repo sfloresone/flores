@@ -64,9 +64,11 @@ dependen de la gestión térmica y de energía y son más ruidosos.
   que no carga el runtime completo. Claude Code tarda unos 9 ms en `--version`
   y unos 167 ms en hacer un turno. La cifra que representa la experiencia real
   es la de `perf-hello`.
-- **El RSS es el del proceso lanzado.** `os.wait4` devuelve el pico de RSS del
-  hijo directo; si el agente lanza subprocesos y no los espera, su memoria no
-  cuenta. Lo mismo ocurre con hyperfine y `/usr/bin/time`.
+- **El RSS es el del proceso lanzado.** `tools/measure` devuelve el pico de RSS
+  del hijo directo; si el agente lanza subprocesos y no los espera, su memoria no
+  cuenta. En Linux hay un suelo de unos 2,5 MiB (el propio lanzador): un valor
+  pegado a él se publica como "≤ suelo". Detalles en
+  [metrics.md](metrics.md#rss-y-el-suelo-del-lanzador).
 - **`harness_ms`** = tiempo total − tiempo que tardó el mock en contestar. Como
   el mock es instantáneo, en `perf-hello` es prácticamente igual al total.
 - **"Tools" es informativo.** Cada harness declara las tools a su manera (Pi y
@@ -110,22 +112,79 @@ de referencia de cómo lo resuelven los harnesses actuales. Es determinista
 cualquier plataforma y funciona como trinquete: un escenario que flores ya
 supera no puede volver a fallar.
 
-## Capa C: tareas end-to-end (planificada)
+## Capa C: tareas end-to-end con modelos reales
 
-Modelos reales a través de **Cloudflare AI Gateway**, con un presupuesto de unos 20 €/mes:
+Primer bloque (F3): **`flores-micro`**, 18 tareas pequeñas en Docker, listadas con
+su porqué en [flores-micro.md](flores-micro.md). Más adelante (F4): subconjuntos de
+Terminal-Bench 2.0, SWE-bench Verified y Aider Polyglot.
 
-1. `flores-micro`: 20–30 tareas propias en Docker con su test de verificación.
-   Es el smoke test barato.
-2. Un subconjunto de **Terminal-Bench 2.0** (vía Harbor).
-3. Un subconjunto pequeño de **SWE-bench Verified** y de **Aider Polyglot**.
+### Cómo se ejecuta
 
-Reglas para la capa C:
+```
+flores-bench tasks run ──▶ Harbor ──▶ contenedor (agente fijado: claude-code, codex, pi, fx)
+                                          │  token del medidor, nunca la clave real
+                                          ▼
+                      tools/meter (host, solo loopback / bridge de Docker)
+                          │  cambia token → clave real, añade cf-aig-authorization
+                          │  y cf-aig-skip-cache, mide tokens y coste, corta el gasto
+                          ▼
+                Cloudflare AI Gateway ──▶ Anthropic / OpenAI
+```
 
-- k ≥ 3 repeticiones por tarea; se reportan pass@1 y pass^k.
-- Comparación pareada: mismas tareas y mismo modelo.
-- **Caché del gateway desactivada** durante las evaluaciones, para que una
-  repetición no reciba una respuesta cacheada.
-- Primero se calibra el coste por tarea con una ejecución pequeña y solo
-  después se decide el tamaño de la suite.
-- Cuando haya modelos locales (Ollama), servirán para el día a día y los
-  modelos frontera quedarán para los checkpoints.
+- **[Harbor](https://docs.harborframework.com)** (fijado en el grupo `tasks` de
+  `pyproject.toml`) construye la imagen de cada tarea, instala el agente en la
+  versión de `agents.toml`, le pasa el enunciado y ejecuta el verificador. Trae
+  integrados Claude Code, Codex, Pi y fx, así que la comparación usa sus
+  adaptadores oficiales, no unos nuestros.
+- **El medidor (`tools/meter`)** es la pieza de seguridad:
+  - Las claves reales solo existen en su proceso. Harbor recibe un entorno sin
+    claves y los agentes, un token aleatorio por ejecución.
+  - Se niega a reenviar una petición si el modelo no está en
+    [`suites/tasks/pricing.json`](../suites/tasks/pricing.json), si se ha
+    agotado el presupuesto (`--budget-usd`) o si se supera el tope de
+    peticiones. La capa B mostró que los agentes pueden entrar en bucle sin límite.
+  - Mide los tokens con los campos de uso del propio proveedor (Anthropic, Chat
+    Completions y Responses), igual para todos los agentes. Si un proveedor no
+    los envía, estima el coste por bytes y lo marca.
+  - Se niega a escuchar en `0.0.0.0`.
+- **Atribución**: las ejecuciones van de una en una, así que cada petición del
+  medidor pertenece a la ejecución en cuya fase de agente cae (con 2 s de margen).
+- **Validación gratuita (N1)**: `flores-bench tasks validate` exige que `oracle`
+  saque 1 y `nop` saque 0 en cada tarea.
+- **Ensayo sin coste**: `--upstream mock` hace todo el recorrido (Docker,
+  agente, medidor) contra el mock provider. Sirve para probar el circuito antes
+  de gastar.
+
+### Modelos y comparación
+
+| Tier | Anthropic (Claude Code, Pi) | OpenAI (Codex, Pi, fx) | Uso |
+|---|---|---|---|
+| `cheap` | `claude-haiku-5-5` | `gpt-5.4-mini` | día a día |
+| `frontier` | `claude-sonnet-5-5` | `gpt-6.1-sol` | checkpoints puntuales |
+
+Configurado en [`suites/tasks/campaign.toml`](../suites/tasks/campaign.toml). Cada
+modelo lo comparten varios agentes, así que la comparación es **pareada**: mismas
+tareas y mismo modelo, solo cambia el harness. fx solo usa OpenAI porque su
+adaptador de Harbor solo habla Chat Completions.
+
+### Reglas
+
+- k ≥ 3 repeticiones por tarea; se publican **pass@1** (media de aciertos) y
+  **pass^k** (tareas resueltas en las k: fiabilidad), coste, tokens, peticiones y
+  tiempo del agente.
+- **Caché del gateway desactivada** en cada petición (`cf-aig-skip-cache`), para
+  que una repetición no reciba una respuesta cacheada.
+- Nunca en PR. Solo a mano, con presupuesto explícito.
+- Primero se calibra el coste con una ejecución pequeña (1 tarea, k=1), y solo
+  después se decide cuántas tareas y repeticiones caben en los 20 €/mes.
+- Cuando haya modelos locales (Ollama), servirán para el día a día y los modelos
+  frontera quedarán para los checkpoints.
+
+### Limitaciones conocidas
+
+- Los precios de `pricing.json` se copian a mano de las páginas oficiales (con
+  fecha y fuente). Hay que revisarlos antes de cada campaña.
+- En Linux el medidor escucha en la IP del bridge `docker0`. Está implementado,
+  pero solo se ha probado en macOS (colima).
+- La atribución por tiempo exige ejecuciones secuenciales (`-n 1`), así que una
+  campaña tarda lo que suman todas las ejecuciones.

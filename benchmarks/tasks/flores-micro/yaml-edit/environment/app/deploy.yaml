@@ -1,0 +1,15 @@
+# Deployment for the shop stack.
+# Owner: platform team. Reviewed 2026-10.
+services:
+  api:
+    image: shop/api:1.8.2
+    # scaled for the autumn campaign
+    replicas: 2
+    env:
+      PORT: "8080"
+  worker:
+    image: shop/worker:1.8.2
+    replicas: 1  # one is enough, jobs are idempotent
+    env:
+      QUEUE: jobs
+# end of file

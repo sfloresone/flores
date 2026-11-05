@@ -3,7 +3,7 @@
 Same idea as fx's competitive libfx benchmark: the model's answer is scripted
 and instant, so what is left is pure harness overhead. Per run we record
 
-* wall/cpu time and peak RSS of the agent process (os.wait4 rusage),
+* wall/cpu time and peak RSS of the agent process (rusage, via tools/measure),
 * what the harness sent to the model, as seen by the mock: number of
   requests, total request bytes, system-prompt bytes and declared tools,
 * `harness_ms` = wall time minus the time the mock spent answering.
@@ -49,6 +49,7 @@ def run_once(agent: AgentConfig, mock: MockProvider) -> dict:
         "wall_ms": proc.wall_ms,
         "cpu_ms": proc.cpu_ms,
         "rss_mb": proc.rss_mb,
+        "rss_floor_mb": proc.rss_floor_mb,
         "harness_ms": max(0.0, proc.wall_ms - mock_ms),
         "requests": len(records),
         "llm_requests": len(llm),
@@ -61,7 +62,17 @@ def run_once(agent: AgentConfig, mock: MockProvider) -> dict:
     }
 
 
-NUMERIC = ("wall_ms", "cpu_ms", "rss_mb", "harness_ms", "request_bytes", "system_bytes", "llm_requests", "tools")
+NUMERIC = (
+    "wall_ms",
+    "cpu_ms",
+    "rss_mb",
+    "rss_floor_mb",
+    "harness_ms",
+    "request_bytes",
+    "system_bytes",
+    "llm_requests",
+    "tools",
+)
 
 
 def run(agents: list[AgentConfig], runs: int, warmup: int, rounds: int, seed: int = 0, log=print) -> dict:

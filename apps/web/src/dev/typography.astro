@@ -1,0 +1,94 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import "./typography.css";
+
+const variants = [
+  { name: "Redaction 35", className: "redaction-35", note: "Less texture" },
+  { name: "Redaction 50", className: "redaction-50", note: "Initial proposal" },
+  { name: "Redaction 70", className: "redaction-70", note: "More texture" },
+];
+---
+
+<BaseLayout title="Typography study · flores" description="A local comparison of Redaction and Figtree.">
+  <main class="type-study">
+    <header class="study-header">
+      <a class="back-link" href="/dev">← Development catalog</a>
+      <div class="eyebrow"><span>flores / design lab</span><span>study 01 — typography</span></div>
+      <h1>One tool.<br /><em>Many questions.</em></h1>
+      <div class="intro">
+        <p>A study of Redaction and Figtree for a website about building, measuring, and understanding a coding agent.</p>
+        <p>Proposal under review · Development only</p>
+      </div>
+    </header>
+
+    <section class="study-section" aria-labelledby="comparison-title">
+      <div class="section-heading">
+        <div><span class="section-number">01 / COMPARISON</span><h2 id="comparison-title">One sentence, three textures.</h2></div>
+        <p>The same family and size, with different degrees of typographic texture.</p>
+      </div>
+      <div class="specimens">
+        {variants.map((variant) => (
+          <article class="specimen">
+            <div class="specimen-meta"><h3>{variant.name}</h3><span>{variant.note}</span></div>
+            <p class:list={["specimen-text", variant.className]}>Measure before you build.</p>
+            <p class:list={["specimen-small", variant.className]}>Design, code, and experimentation: what have we learned?</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="study-section context-section" aria-labelledby="context-title">
+      <div class="section-heading">
+        <div><span class="section-number">02 / IN CONTEXT</span><h2 id="context-title">Redaction 50 + Figtree.</h2></div>
+        <p>An exploratory composition, not a final design proposal.</p>
+      </div>
+      <article class="editorial">
+        <div class="editorial-copy">
+          <p class="kicker">An open investigation · 01</p>
+          <h3>Build to<br /><em>understand.</em></h3>
+          <p>A coding agent is more than a model. It is a system that makes decisions, runs tools, and manages context. With flores, we want to understand every piece, from the first benchmark to the last line of code.</p>
+          <a href="#reading">Explore the study <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="terminal" aria-label="Illustrative terminal example">
+          <div class="terminal-top"><span>flores / terminal</span><span>● ● ●</span></div>
+          <pre><code><span>$</span> flores run "explore the project"
+
+<span>→</span> reading context
+<span>→</span> preparing tools
+<span>→</span> observing the trajectory
+
+<span>_</span></code></pre>
+          <p>Illustrative example · not an actual run</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="study-section reading-section" id="reading" aria-labelledby="reading-title">
+      <div class="section-heading">
+        <div><span class="section-number">03 / READING</span><h2 id="reading-title">Text, data, and details.</h2></div>
+        <p>Readability tests for documentation and interfaces.</p>
+      </div>
+      <div class="reading-grid">
+        <article class="reading-copy">
+          <p class="kicker">Documentation / foundations</p>
+          <h3>What does a harness do?</h3>
+          <p>The harness connects the model to tools and its environment. It organizes context, processes responses, and decides when a session ends. Its design shapes the agent's user experience, resource consumption, and reliability.</p>
+          <p>Measurement is about more than producing a number: it also means explaining what was measured, under which conditions, and which conclusions we cannot draw.</p>
+          <p class="character-test">Letters, numbers, and punctuation: ABC abc 0123456789 · ? ! &amp; @ #</p>
+        </article>
+        <div class="data-example">
+          <p class="kicker">Benchmark / visual example</p>
+          <h3>Results from a run</h3>
+          <table>
+            <caption>Empty values: a formatting example, not actual results.</caption>
+            <thead><tr><th scope="col">Metric</th><th scope="col">Value</th></tr></thead>
+            <tbody><tr><td>Startup time</td><td>—</td></tr><tr><td>Resident memory</td><td>—</td></tr><tr><td>Provider requests</td><td>—</td></tr></tbody>
+          </table>
+          <div class="sample-buttons"><button type="button" disabled>View methodology ↗</button><button type="button" disabled>View results</button></div>
+          <p class="sample-note">Sample buttons, no action.</p>
+        </div>
+      </div>
+    </section>
+    <footer class="study-footer"><span>flores / typography study</span><a href="/dev">Back to catalog ↑</a></footer>
+  </main>
+</BaseLayout>

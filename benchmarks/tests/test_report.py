@@ -48,3 +48,24 @@ def test_budgets_enforced_only_on_linux():
     assert budgets.check(fake_result(wall=1.0), log=lambda *_: None)
     assert not budgets.check(fake_result(wall=999.0), log=lambda *_: None)
     assert budgets.check(fake_result(platform="darwin-arm64", wall=999.0), log=lambda *_: None)
+
+
+def test_rss_at_the_launcher_floor_is_shown_as_upper_bound():
+    p50 = lambda v: {"p50": v}  # noqa: E731
+    assert report._fmt("rss_mb", p50(2.95), p50(2.9)) == "≤ 2.9"  # cannot be told apart from the floor
+    assert report._fmt("rss_mb", p50(4.38), p50(2.9)) == "4.38"  # clearly above it: a real value
+    assert report._fmt("rss_mb", p50(1.14), p50(0.0)) == "1.14"  # macOS: no floor
+    assert report._fmt("rss_mb", p50(6.5), None) == "6.50"  # old results without a floor
+
+
+def test_run_measured_uses_measure(tmp_path):
+    import sys
+
+    from flores_bench.build import build_tools
+    from flores_bench.process import run_measured
+
+    build_tools()
+    script = "import sys; b = bytearray(32 << 20); b[::4096] = b'\\x01' * len(b[::4096]); print('hi'); sys.exit(4)"
+    r = run_measured([sys.executable, "-c", script], {"PATH": "/usr/bin:/bin"}, tmp_path, 60)
+    assert r.exit_code == 4 and r.stdout == "hi\n" and not r.timed_out
+    assert r.rss_mb >= 32 and r.rss_floor_mb < 32

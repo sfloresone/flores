@@ -1,14 +1,16 @@
-"""Build the Go helper binaries (mock provider and flores-stub)."""
+"""Build the Go helper binaries (mock provider, flores-stub, meter)."""
 
 from __future__ import annotations
 
 import subprocess
 
-from flores_bench.paths import BENCH_ROOT, BIN_DIR, MOCK_BIN, STUB_BIN
+from flores_bench.paths import BENCH_ROOT, BIN_DIR, MEASURE_BIN, METER_BIN, MOCK_BIN, STUB_BIN
 
 TOOLS = {
     MOCK_BIN: "./tools/mockprovider",
     STUB_BIN: "./tools/flores-stub",
+    METER_BIN: "./tools/meter",
+    MEASURE_BIN: "./tools/measure",
 }
 
 

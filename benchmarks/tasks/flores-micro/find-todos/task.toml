@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/find-todos"
+
+[metadata]
+category = "shell"
+difficulty = "easy"
+why = "Búsqueda con criterios (extensiones, exclusiones) y salida con formato exacto."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

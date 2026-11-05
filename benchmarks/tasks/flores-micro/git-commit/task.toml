@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/git-commit"
+
+[metadata]
+category = "git"
+difficulty = "easy"
+why = "Usar git como lo haría una persona: cambio acotado, un commit con el formato pedido y el árbol limpio."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048
