@@ -1,0 +1,9 @@
+/* The site is dark: black background, light text. */
+@theme {
+  --color-night: #000000;
+  --color-ink: #141414;
+  --color-cloud: #f7f7f5;
+  --color-muted: #8a8a8a;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Redaction 35", Georgia, serif;
+}

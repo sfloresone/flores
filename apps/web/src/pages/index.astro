@@ -1,25 +1,20 @@
 ---
+import FloresBloom from "../components/bloom/FloresBloom.astro";
+import { PRESETS } from "../components/bloom/params";
 import BaseLayout from "../layouts/BaseLayout.astro";
+
+// Values picked on r3f.maximeheckel.com/dof-fbo (2026-11-05). Their names there:
+// frequency 0.15, speedFactor 34.5, fov 0, blur 0.9, focus 6.90.
+const bloom = { ...PRESETS.maxime, curl: 0.15, speed: 34.5, fov: 0, blur: 0.9, focus: 6.9 };
 ---
 
 <BaseLayout>
-  <main class="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center gap-6 px-6 py-16">
-    <p class="text-sm tracking-wide text-muted uppercase">flores</p>
-    <h1 class="text-4xl font-semibold tracking-tight text-ink">
-      A coding agent measured before it is written.
+  <main class="relative h-dvh overflow-hidden bg-night">
+    <FloresBloom class="absolute inset-0" params={bloom} />
+    <h1
+      class="pointer-events-none absolute inset-x-0 top-[12vh] m-0 text-center font-display text-[clamp(3rem,9vw,7.5rem)] leading-none font-normal tracking-[-0.035em] text-cloud"
+    >
+      Flores
     </h1>
-    <p class="text-lg leading-relaxed text-muted">
-      Benchmarks first, Go agent second. This website will share what we learn
-      and the published results; charts will read the JSON files in
-      <code class="text-ink">benchmarks/published/</code>, not manually copied figures.
-    </p>
-    <p>
-      <a
-        class="text-ink underline underline-offset-4 hover:no-underline"
-        href="https://github.com/sfloresone/flores/blob/main/benchmarks/published/README.md"
-      >
-        Published results in the repository
-      </a>
-    </p>
   </main>
 </BaseLayout>

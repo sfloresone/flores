@@ -1,4 +1,5 @@
 ---
+import displayFont from "../assets/fonts/Redaction35-Regular.latin.woff2?url";
 import "../styles/global.css";
 
 interface Props {
@@ -10,6 +11,11 @@ const {
   title = "flores",
   description = "A coding agent built from scratch, measured before it is written.",
 } = Astro.props;
+
+// Inline SVG favicon: no extra request and no 404 for /favicon.ico.
+const favicon =
+  "data:image/svg+xml," +
+  encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#f7f7f5"/></svg>`);
 ---
 
 <!doctype html>
@@ -19,6 +25,8 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <link rel="icon" href={favicon} />
+    <link rel="preload" href={displayFont} as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <slot />
