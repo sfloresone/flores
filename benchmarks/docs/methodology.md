@@ -69,9 +69,10 @@ dependen de la gestión térmica y de energía y son más ruidosos.
   cuenta. Lo mismo ocurre con hyperfine y `/usr/bin/time`.
 - **`harness_ms`** = tiempo total − tiempo que tardó el mock en contestar. Como
   el mock es instantáneo, en `perf-hello` es prácticamente igual al total.
-- **"Tools" es informativo.** Con modelos que admiten *tool search*, algunos
-  harnesses (Pi y Codex con la API Responses) no declaran las tools en la
-  primera petición. La métrica comparable es **bytes enviados al modelo**.
+- **"Tools" es informativo.** Cada harness declara las tools a su manera (Pi y
+  Codex, con la API Responses, las mandan como un item `additional_tools` y
+  Codex las agrupa en *namespaces*; ver [adapters.md](adapters.md)). La métrica
+  comparable es **bytes enviados al modelo**.
 - **El modelo configurado cambia el harness.** Claude Code usa un system prompt
   distinto según el modelo. Por eso cada agente usa un ID de modelo real que
   conoce (`agents.toml`) aunque responda el mock.

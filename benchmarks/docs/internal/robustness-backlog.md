@@ -53,6 +53,7 @@ Prioridad: 🔴 puede dar resultados engañosos · 🟡 mejora · 🟢 menor.
 
 1. Tests de robustez del banco (los 🔴).
 2. Separar en `budgets.toml` los límites deterministas de los de tiempo.
-3. Añadir ejecución programada y el resumen "qué se midió" en la CI.
+3. Partir el job `perf` en "pasada corta en PR" y "referencia en `main`/programada",
+   y añadir el resumen "qué se midió" en la CI.
 4. Esquema de `result/v0`.
 5. Capa C cuando exista el agente.

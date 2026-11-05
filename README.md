@@ -8,7 +8,7 @@ benchmarks y después el agente, de modo que cada decisión se justifica con dat
 
 | Parte | Estado |
 |---|---|
-| [`benchmarks/`](benchmarks/): suite de benchmarks (Python + helpers en Go) | F1 ✅ |
+| [`benchmarks/`](benchmarks/): suite de benchmarks (Python + helpers en Go) | F1 ✅ capa A (perf) · F2 ✅ capa B (comportamiento) |
 | Agente `flores` (Go) | pendiente |
 | Web (exposición de lo aprendido y resultados) | pendiente |
 

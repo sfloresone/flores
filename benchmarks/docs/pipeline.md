@@ -50,7 +50,10 @@ Hay cuatro situaciones. Cada una responde a una pregunta distinta.
 
 **Dónde estamos hoy:**
 
-- Están el 1, el 2 y el 3, excepto la ejecución programada (`schedule`).
+- Está el 1 (job `test`, incluida la puerta de la capa B con flores-stub).
+- El 2 y el 3 están **fusionados** en un solo job (`perf`): en cada PR corre la
+  pasada completa con todos los agentes, no una corta con el stub. Separarlos
+  y añadir `schedule` está pendiente ([notas internas](internal/robustness-backlog.md)).
 - Falta el 4: la capa C no existe todavía.
 - Los avisos y los fallos de la capa B (comportamiento) se aplican en cualquier
   plataforma; los de tiempo, solo en Linux.
