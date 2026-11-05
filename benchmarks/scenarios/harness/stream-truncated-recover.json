@@ -1,0 +1,29 @@
+{
+  "name": "stream-truncated-recover",
+  "title": "Stream cortado a mitad: reintentar",
+  "category": "streaming",
+  "why": "Las conexiones SSE se cortan (proxies, redes móviles). El agente debe detectar que el stream no terminó y reintentar, sin dar por buena una respuesta a medias.",
+  "prompt": "Say something.",
+  "mock": {
+    "chunk_runes": 6,
+    "steps": [
+      {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "truncate": {
+          "after_chunks": 2,
+          "times": 1
+        }
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "The quick brown fox jumps over the lazy dog."
+    ],
+    "retries": {
+      "min": 1
+    },
+    "max_wall_ms": 30000
+  }
+}

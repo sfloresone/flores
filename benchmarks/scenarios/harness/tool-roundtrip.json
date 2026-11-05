@@ -1,0 +1,41 @@
+{
+  "name": "tool-roundtrip",
+  "title": "Una tool call y su resultado vuelve al modelo",
+  "category": "tools",
+  "requires": [
+    "shell"
+  ],
+  "why": "El bucle básico de un agente: ejecutar la tool y devolver su salida real al modelo. El marcador solo existe en la salida del comando (flores-$((40+2)) -> flores-42), así que prueba que el comando se ejecutó de verdad.",
+  "prompt": "Run the command you are asked to run.",
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "shell": "echo flores-$((40+2))"
+          }
+        ]
+      },
+      {
+        "text": "Done."
+      }
+    ],
+    "after_last": "error"
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Done."
+    ],
+    "llm_requests": {
+      "min": 2,
+      "max": 2
+    },
+    "tool_results": {
+      "min": 1
+    },
+    "request_contains": [
+      "flores-42"
+    ]
+  }
+}

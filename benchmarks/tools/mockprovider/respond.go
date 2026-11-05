@@ -17,6 +17,28 @@ type reply struct {
 	chunkRunes int
 	ttft       time.Duration
 	chunkDelay time.Duration
+	// truncateAfter >= 0 drops the connection after that many text chunks.
+	truncateAfter int
+}
+
+// errTruncated is the panic value used to drop a connection on purpose.
+var errTruncated = http.ErrAbortHandler
+
+// textChunks returns the chunks to stream, and whether the stream must be cut
+// right after them.
+func (r *reply) textChunks() ([]string, bool) {
+	cs := r.chunks()
+	if r.truncateAfter >= 0 && r.truncateAfter <= len(cs) {
+		return cs[:r.truncateAfter], true
+	}
+	return cs, false
+}
+
+func (s *sse) cut() {
+	if s.f != nil {
+		s.f.Flush()
+	}
+	panic(errTruncated)
 }
 
 func (r *reply) callID(i int) string { return fmt.Sprintf("call_%s_%d", r.id, i) }
@@ -118,7 +140,7 @@ func chatToolCalls(r *reply) []map[string]any {
 		out = append(out, map[string]any{
 			"id":       r.callID(i),
 			"type":     "function",
-			"function": map[string]any{"name": tc.Name, "arguments": string(tc.Arguments)},
+			"function": map[string]any{"name": tc.Name, "arguments": tc.args()},
 		})
 	}
 	return out
@@ -145,6 +167,9 @@ func writeChat(w http.ResponseWriter, r *reply, info RequestInfo) {
 	id := "chatcmpl-" + r.id
 	if !info.Stream {
 		time.Sleep(r.ttft)
+		if r.truncateAfter >= 0 {
+			panic(errTruncated)
+		}
 		msg := map[string]any{"role": "assistant", "content": nil}
 		if r.step.Text != "" {
 			msg["content"] = r.step.Text
@@ -169,8 +194,12 @@ func writeChat(w http.ResponseWriter, r *reply, info RequestInfo) {
 		}
 	}
 	s.send("", chunk(map[string]any{"role": "assistant", "content": ""}, nil))
-	for _, c := range r.chunks() {
+	chunks, cut := r.textChunks()
+	for _, c := range chunks {
 		s.send("", chunk(map[string]any{"content": c}, nil))
+	}
+	if cut {
+		s.cut()
 	}
 	for i, tc := range chatToolCalls(r) {
 		tc["index"] = i
@@ -208,13 +237,16 @@ func writeAnthropic(w http.ResponseWriter, r *reply, info RequestInfo) {
 	id := "msg_" + r.id
 	if !info.Stream {
 		time.Sleep(r.ttft)
+		if r.truncateAfter >= 0 {
+			panic(errTruncated)
+		}
 		content := []any{}
 		if r.step.Text != "" {
 			content = append(content, map[string]any{"type": "text", "text": r.step.Text})
 		}
 		for i, tc := range r.step.ToolCalls {
 			content = append(content, map[string]any{
-				"type": "tool_use", "id": "toolu_" + r.callID(i), "name": tc.Name, "input": tc.Arguments,
+				"type": "tool_use", "id": "toolu_" + r.callID(i), "name": tc.Name, "input": tc.argsObject(),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -241,11 +273,15 @@ func writeAnthropic(w http.ResponseWriter, r *reply, info RequestInfo) {
 			"type": "content_block_start", "index": index,
 			"content_block": map[string]any{"type": "text", "text": ""},
 		})
-		for _, c := range r.chunks() {
+		chunks, cut := r.textChunks()
+		for _, c := range chunks {
 			s.send("content_block_delta", map[string]any{
 				"type": "content_block_delta", "index": index,
 				"delta": map[string]any{"type": "text_delta", "text": c},
 			})
+		}
+		if cut {
+			s.cut()
 		}
 		s.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
 		index++
@@ -259,7 +295,7 @@ func writeAnthropic(w http.ResponseWriter, r *reply, info RequestInfo) {
 		})
 		s.send("content_block_delta", map[string]any{
 			"type": "content_block_delta", "index": index,
-			"delta": map[string]any{"type": "input_json_delta", "partial_json": string(tc.Arguments)},
+			"delta": map[string]any{"type": "input_json_delta", "partial_json": tc.args()},
 		})
 		s.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
 		index++
@@ -288,7 +324,7 @@ func responsesItems(r *reply, status string) []map[string]any {
 	for i, tc := range r.step.ToolCalls {
 		args := ""
 		if status == "completed" {
-			args = string(tc.Arguments)
+			args = tc.args()
 		}
 		items = append(items, map[string]any{
 			"id": fmt.Sprintf("fc_%s_%d", r.id, i), "type": "function_call", "status": status,
@@ -325,6 +361,9 @@ func writeResponses(w http.ResponseWriter, r *reply, info RequestInfo) {
 	created := time.Now().Unix()
 	if !info.Stream {
 		time.Sleep(r.ttft)
+		if r.truncateAfter >= 0 {
+			panic(errTruncated)
+		}
 		writeJSON(w, http.StatusOK, responsesObject(r, "completed", created))
 		return
 	}
@@ -353,10 +392,14 @@ func writeResponses(w http.ResponseWriter, r *reply, info RequestInfo) {
 			send("response.content_part.added", map[string]any{
 				"item_id": itemID, "output_index": idx, "content_index": 0, "part": part,
 			})
-			for _, c := range r.chunks() {
+			chunks, cut := r.textChunks()
+			for _, c := range chunks {
 				send("response.output_text.delta", map[string]any{
 					"item_id": itemID, "output_index": idx, "content_index": 0, "delta": c, "logprobs": []any{},
 				})
+			}
+			if cut {
+				s.cut()
 			}
 			send("response.output_text.done", map[string]any{
 				"item_id": itemID, "output_index": idx, "content_index": 0, "text": r.step.Text, "logprobs": []any{},

@@ -1,0 +1,24 @@
+{
+  "name": "huge-output",
+  "title": "Respuesta de 1 MiB",
+  "category": "streaming",
+  "why": "Salidas enormes (ficheros generados, logs) ponen a prueba el buffering del stream y del render. No debe colgarse ni disparar la memoria. No se limita el número de peticiones: compactar el contexto tras una respuesta enorme (lo que hace Pi) es una decisión legítima.",
+  "prompt": "Print a lot.",
+  "timeout_s": 60,
+  "mock": {
+    "chunk_runes": 4096,
+    "steps": [
+      {
+        "text": "flores-big-0123456789abcdef-",
+        "repeat": 37450
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "flores-big-0123456789abcdef-flores-big"
+    ],
+    "max_wall_ms": 30000
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "parallel-tools",
+  "title": "Dos tool calls en el mismo turno",
+  "category": "tools",
+  "requires": [
+    "shell"
+  ],
+  "why": "Los modelos piden varias tools a la vez. Un bug típico es ejecutar solo la primera o mezclar los IDs de las respuestas.",
+  "prompt": "Run both commands.",
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "shell": "echo flores-$((10+1))"
+          },
+          {
+            "shell": "echo flores-$((20+2))"
+          }
+        ]
+      },
+      {
+        "text": "Both done."
+      }
+    ],
+    "after_last": "error"
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Both done."
+    ],
+    "llm_requests": {
+      "min": 2,
+      "max": 2
+    },
+    "tool_results": {
+      "min": 2
+    },
+    "request_contains": [
+      "flores-11",
+      "flores-22"
+    ]
+  }
+}

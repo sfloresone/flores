@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from flores_bench.adapters.base import Adapter, HelloContext, Invocation
+from flores_bench.adapters.base import Adapter, Invocation, RunContext, Unsupported
 from flores_bench.paths import STUB_BIN
 
 
@@ -17,15 +17,24 @@ class FloresStub(Adapter):
     label = "flores-stub"
     binary = str(STUB_BIN)
     version_args = ("version",)
+    supports_trajectory = True
 
     def path(self) -> str | None:
         return str(STUB_BIN) if STUB_BIN.exists() else None
 
-    def hello(self, ctx: HelloContext) -> Invocation:
+    def invoke(self, ctx: RunContext) -> Invocation:
+        argv = [str(STUB_BIN), "run", "--prompt", ctx.prompt]
+        if ctx.trajectory:
+            argv += ["--output", "jsonl"]
         return Invocation(
-            argv=[str(STUB_BIN), "run", "--prompt", ctx.prompt],
+            argv=argv,
             env={"FLORES_BASE_URL": f"{ctx.mock_url}/v1", "FLORES_MODEL": ctx.model, "FLORES_API_KEY": "mock"},
         )
+
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        # The stub has no tools; it answers every call with an error. This is
+        # the name the real flores shell tool is expected to use.
+        return "bash", {"command": command}
 
 
 class Pi(Adapter):
@@ -34,7 +43,7 @@ class Pi(Adapter):
     binary = "pi"
     homepage = "https://pi.dev"
 
-    def hello(self, ctx: HelloContext) -> Invocation:
+    def invoke(self, ctx: RunContext) -> Invocation:
         # Override only the base URL of the built-in providers so Pi keeps the
         # model metadata, prompts and wire protocol it would use in real life.
         (ctx.config_dir / "models.json").write_text(
@@ -58,6 +67,9 @@ class Pi(Adapter):
             },
         )
 
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        return "bash", {"command": command}
+
 
 class ClaudeCode(Adapter):
     name = "claude-code"
@@ -65,9 +77,12 @@ class ClaudeCode(Adapter):
     binary = "claude"
     homepage = "https://code.claude.com"
 
-    def hello(self, ctx: HelloContext) -> Invocation:
+    def invoke(self, ctx: RunContext) -> Invocation:
+        argv = [self.path() or self.binary, "-p", "--model", ctx.model]
+        if ctx.full_access:
+            argv.append("--dangerously-skip-permissions")
         return Invocation(
-            argv=[self.path() or self.binary, "-p", "--model", ctx.model, ctx.prompt],
+            argv=[*argv, ctx.prompt],
             env={
                 "CLAUDE_CONFIG_DIR": str(ctx.config_dir),
                 "ANTHROPIC_BASE_URL": ctx.mock_url,
@@ -79,6 +94,9 @@ class ClaudeCode(Adapter):
             },
         )
 
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        return "Bash", {"command": command, "description": "Run a command"}
+
 
 class Codex(Adapter):
     name = "codex"
@@ -86,7 +104,7 @@ class Codex(Adapter):
     binary = "codex"
     homepage = "https://github.com/openai/codex"
 
-    def hello(self, ctx: HelloContext) -> Invocation:
+    def invoke(self, ctx: RunContext) -> Invocation:
         (ctx.config_dir / "config.toml").write_text(
             f'model = "{ctx.model}"\n'
             'model_provider = "mock"\n\n'
@@ -96,10 +114,18 @@ class Codex(Adapter):
             'env_key = "MOCK_API_KEY"\n'
             'wire_api = "responses"\n'
         )
+        argv = [self.path() or self.binary, "exec", "--skip-git-repo-check"]
+        if ctx.full_access:
+            argv.append("--dangerously-bypass-approvals-and-sandbox")
         return Invocation(
-            argv=[self.path() or self.binary, "exec", "--skip-git-repo-check", ctx.prompt],
+            argv=[*argv, ctx.prompt],
             env={"CODEX_HOME": str(ctx.config_dir), "MOCK_API_KEY": "mock"},
         )
+
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        # With gpt-6.x Codex groups its tools in namespaces and `functions.exec`
+        # is a freeform tool without a JSON schema; mapping pending.
+        raise Unsupported("codex: shell tool is a namespaced freeform tool (mapping pending)")
 
 
 class Fx(Adapter):
@@ -108,7 +134,7 @@ class Fx(Adapter):
     binary = "fx"
     homepage = "https://fx.sh"
 
-    def hello(self, ctx: HelloContext) -> Invocation:
+    def invoke(self, ctx: RunContext) -> Invocation:
         # fx 0.0.16 reads ~/.fx and ignores FX_HOME (documented for later
         # releases), so isolate it through HOME. Without isolation it silently
         # uses the user's own login (e.g. a Codex subscription) instead of the mock.
@@ -132,8 +158,11 @@ class Fx(Adapter):
         )
         settings.chmod(0o600)
         ctx.config_dir.chmod(0o700)
+        argv = [self.path() or self.binary, "ask", "--no-save"]
+        if ctx.full_access:
+            argv.append("--full-access")
         return Invocation(
-            argv=[self.path() or self.binary, "ask", "--no-save", ctx.prompt],
+            argv=[*argv, ctx.prompt],
             env={
                 "HOME": str(ctx.config_dir),
                 "FX_HOME": str(fx_dir),
@@ -141,6 +170,9 @@ class Fx(Adapter):
                 "MOCK_API_KEY": "mock",
             },
         )
+
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        return "shell", {"action": "run", "command": command}
 
 
 ADAPTERS: dict[str, Adapter] = {a.name: a for a in (FloresStub(), Pi(), ClaudeCode(), Codex(), Fx())}

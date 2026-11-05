@@ -6,26 +6,70 @@
 
 p50 = mediana; entre corchetes, intervalo de confianza del 95 % de la mediana (bootstrap).
 
+## Comportamiento del harness (capa B): fallos guionizados
+
+### `darwin-arm64`
+
+Commit `65006b335b` (dirty) · 2026-11-05T14:13:36Z · 1 ejecución(es) por escenario
+
+Escenarios y su porqué: [`../docs/harness-scenarios.md`](../docs/harness-scenarios.md).
+
+| Escenario | flores-stub<br><sub>0.0.0-stub</sub> | Pi<br><sub>1.5.0</sub> | Claude Code<br><sub>2.1.318</sub> | Codex<br><sub>0.164.0</sub> | fx<br><sub>0.0.16</sub> |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Respuesta de texto simple**<br><sub>`basic-text` · basics</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Argumentos de tool con JSON roto**<br><sub>`malformed-tool-args` · tools</sub> | ✅ | ✅ | ✅ | — | ✅ |
+| **Dos tool calls en el mismo turno**<br><sub>`parallel-tools` · tools</sub> | ❌ | ✅ | ✅ | — | ✅ |
+| **Tres turnos de tools encadenados**<br><sub>`tool-chain` · tools</sub> | ❌ | ✅ | ✅ | — | ✅ |
+| **Una tool call y su resultado vuelve al modelo**<br><sub>`tool-roundtrip` · tools</sub> | ❌ | ✅ | ✅ | — | ✅ |
+| **El modelo pide una tool que no existe**<br><sub>`unknown-tool` · tools</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **401: fallar rápido y sin reintentos**<br><sub>`auth-error-fail-fast` · provider-errors</sub> | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **429 transitorio: reintentar respetando Retry-After**<br><sub>`rate-limit-recover` · provider-errors</sub> | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **503 transitorio: reintentar**<br><sub>`server-error-recover` · provider-errors</sub> | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Respuesta de 1 MiB**<br><sub>`huge-output` · streaming</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Primer token a los 8 s**<br><sub>`slow-first-token` · streaming</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Stream cortado a mitad: reintentar**<br><sub>`stream-truncated-recover` · streaming</sub> | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **El modelo pide tools sin fin**<br><sub>`runaway-tool-loop` · limits</sub> | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Superados / aplicables | **7/13** | **12/13** | **11/13** | **7/9** | **12/13** |
+
+✅ cumple la especificación · ❌ no la cumple · — no aplicable al agente · ⚠️ error del runner
+
+<details><summary>Por qué falla cada caso</summary>
+
+- **flores-stub** · `parallel-tools`: request_contains: esperado flores-11, observado absent; request_contains: esperado flores-22, observado absent <sub>(exit 0, 2 peticiones, 7 ms)</sub>
+- **flores-stub** · `tool-chain`: request_contains: esperado flores-101, observado absent; request_contains: esperado flores-102, observado absent; request_contains: esperado flores-103, observado absent <sub>(exit 0, 4 peticiones, 8 ms)</sub>
+- **flores-stub** · `tool-roundtrip`: request_contains: esperado flores-42, observado absent <sub>(exit 0, 2 peticiones, 6 ms)</sub>
+- **flores-stub** · `rate-limit-recover`: exit: esperado zero, observado 3; stdout_contains: esperado Recovered after rate limit., observado ; llm_requests: esperado {'min': 3, 'max': 3}, observado 1; retries: esperado {'min': 2, 'max': 2}, observado 0 <sub>(exit 3, 1 peticiones, 6 ms)</sub>
+- **flores-stub** · `server-error-recover`: exit: esperado zero, observado 3; stdout_contains: esperado Recovered after server error., observado ; retries: esperado {'min': 1, 'max': 1}, observado 0 <sub>(exit 3, 1 peticiones, 6 ms)</sub>
+- **flores-stub** · `stream-truncated-recover`: exit: esperado zero, observado 3; stdout_contains: esperado The quick brown fox jumps over the lazy dog., observado ; retries: esperado {'min': 1}, observado 0 <sub>(exit 3, 1 peticiones, 11 ms)</sub>
+- **Pi** · `runaway-tool-loop`: completes: esperado exits before timeout, observado timeout; llm_requests: esperado {'max': 50}, observado 3485 <sub>(exit -9, 3485 peticiones, 45007 ms)</sub>
+- **Claude Code** · `auth-error-fail-fast`: completes: esperado exits before timeout, observado timeout; llm_requests: esperado {'min': 1, 'max': 1}, observado 7; max_wall_ms: esperado 10000, observado 60010 <sub>(exit -9, 7 peticiones, 60010 ms)</sub>
+- **Claude Code** · `runaway-tool-loop`: completes: esperado exits before timeout, observado timeout; llm_requests: esperado {'max': 50}, observado 3072 <sub>(exit -9, 3072 peticiones, 45006 ms)</sub>
+- **Codex** · `auth-error-fail-fast`: llm_requests: esperado {'min': 1, 'max': 1}, observado 6 <sub>(exit 1, 6 peticiones, 6479 ms)</sub>
+- **Codex** · `runaway-tool-loop`: completes: esperado exits before timeout, observado timeout; llm_requests: esperado {'max': 50}, observado 7217 <sub>(exit -9, 7217 peticiones, 45005 ms)</sub>
+- **fx** · `runaway-tool-loop`: completes: esperado exits before timeout, observado timeout; llm_requests: esperado {'max': 50}, observado 2822 <sub>(exit -9, 2822 peticiones, 45001 ms)</sub>
+
+</details>
+
 ## Overhead del harness: un "hello world" contra el mock provider
 
 ### `darwin-arm64`
 
-Commit `5ada8e5662` (dirty) · 2026-11-05T13:53:53Z · Apple M5 · 10 cores · local · 3×5 runs (+1 warmup)
+Commit `65006b335b` (dirty) · 2026-11-05T14:14:17Z · Apple M5 · 10 cores · local · 3×5 runs (+1 warmup)
 
 | Agente | Versión | Tiempo p50 (ms) | Harness p50 (ms) | CPU p50 (ms) | RSS p50 (MiB) | Enviado al modelo (KiB) | System prompt (KiB) | Tools | Peticiones |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| flores-stub | 0.0.0-stub | 5.63 <sub>[5.2–7.6]</sub> | 5.58 | 3.41 | 11.6 | 0.2 | 0.1 | 0 | 1 |
-| fx | 0.0.16 | 20.3 <sub>[18.9–21.0]</sub> | 20.1 | 6.29 | 4.84 | 25.0 | 9.3 | 13 | 1 |
-| Claude Code | 2.1.318 | 165.5 <sub>[155.6–169.8]</sub> | 165.3 | 188.9 | 193.5 | 45.1 | 5.6 | 12 | 1 |
-| Pi | 1.5.0 | 166.1 <sub>[164.4–166.8]</sub> | 165.9 | 192.7 | 113.8 | 5.9 | 2.4 | 0 | 1 |
-| Codex | 0.164.0 | 390.1 <sub>[368.1–412.7]</sub> | 389.7 | 156.9 | 101.7 | 54.6 | 27.1 | 0 | 1 |
+| flores-stub | 0.0.0-stub | 5.72 <sub>[5.2–5.9]</sub> | 5.66 | 3.46 | 11.6 | 0.2 | 0.1 | 0 | 1 |
+| fx | 0.0.16 | 19.6 <sub>[18.8–21.9]</sub> | 19.4 | 5.91 | 4.86 | 25.0 | 9.3 | 13 | 1 |
+| Claude Code | 2.1.318 | 163.4 <sub>[158.0–169.9]</sub> | 163.2 | 190.6 | 193.6 | 45.1 | 5.6 | 12 | 1 |
+| Pi | 1.5.0 | 168.3 <sub>[167.5–169.6]</sub> | 168.1 | 196.3 | 113.8 | 5.9 | 2.4 | 4 | 1 |
+| Codex | 0.164.0 | 388.1 <sub>[365.0–407.0]</sub> | 387.7 | 142.0 | 101.6 | 54.6 | 27.1 | 11 | 1 |
 
 ```mermaid
 xychart-beta
     title "Tiempo p50 (ms)"
     x-axis ["flores-stub", "fx", "Claude Code", "Pi", "Codex"]
     y-axis "Tiempo p50 (ms)"
-    bar [5.63, 20.29, 165.55, 166.11, 390.09]
+    bar [5.72, 19.60, 163.41, 168.32, 388.12]
 ```
 
 ```mermaid
@@ -40,21 +84,21 @@ xychart-beta
 
 ### `darwin-arm64`
 
-Commit `5ada8e5662` (dirty) · 2026-11-05T13:53:39Z · Apple M5 · 10 cores · local · 3×30 runs (+5 warmup)
+Commit `65006b335b` (dirty) · 2026-11-05T14:14:04Z · Apple M5 · 10 cores · local · 3×30 runs (+5 warmup)
 
 | Agente | Versión | Tiempo p50 (ms) | CPU p50 (ms) | RSS p50 (MiB) |
 |---|---|---:|---:|---:|
-| process baseline (true) | - | 0.90 <sub>[0.9–0.9]</sub> | 0.55 | 1.14 |
-| fx | 0.0.16 | 2.06 <sub>[2.0–2.1]</sub> | 1.04 | 2.11 |
-| flores-stub | 0.0.0-stub | 3.12 <sub>[3.1–3.1]</sub> | 2.15 | 10.0 |
-| Codex | 0.164.0 | 5.81 <sub>[5.8–5.9]</sub> | 5.17 | 19.0 |
-| Claude Code | 2.1.318 | 8.58 <sub>[8.5–8.6]</sub> | 6.42 | 23.2 |
-| Pi | 1.5.0 | 121.1 <sub>[120.8–121.6]</sub> | 127.8 | 103.6 |
+| process baseline (true) | - | 0.91 <sub>[0.9–0.9]</sub> | 0.55 | 1.14 |
+| fx | 0.0.16 | 2.07 <sub>[2.1–2.1]</sub> | 1.03 | 2.11 |
+| flores-stub | 0.0.0-stub | 3.13 <sub>[3.1–3.2]</sub> | 2.15 | 10.0 |
+| Codex | 0.164.0 | 5.91 <sub>[5.8–6.0]</sub> | 5.22 | 19.0 |
+| Claude Code | 2.1.318 | 8.54 <sub>[8.4–8.6]</sub> | 6.35 | 23.2 |
+| Pi | 1.5.0 | 123.4 <sub>[122.8–123.7]</sub> | 129.9 | 103.6 |
 
 ```mermaid
 xychart-beta
     title "Tiempo p50 (ms)"
     x-axis ["process baseline (true)", "fx", "flores-stub", "Codex", "Claude Code", "Pi"]
     y-axis "Tiempo p50 (ms)"
-    bar [0.90, 2.06, 3.12, 5.81, 8.58, 121.06]
+    bar [0.91, 2.07, 3.13, 5.91, 8.54, 123.41]
 ```

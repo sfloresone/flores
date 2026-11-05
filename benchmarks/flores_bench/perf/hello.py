@@ -14,18 +14,16 @@ directory and the mock's request log must be read between runs.
 
 from __future__ import annotations
 
-import os
 import shutil
-import subprocess
 import tempfile
-import time
 from pathlib import Path
 
-from flores_bench.adapters import HelloContext, Unsupported
+from flores_bench.adapters import RunContext, Unsupported
 from flores_bench.config import AgentConfig
 from flores_bench.envinfo import result_header
 from flores_bench.mock import MockProvider
 from flores_bench.perf.common import Subject, round_orders, sanitized_env
+from flores_bench.process import run_measured
 from flores_bench.stats import summarize
 
 SUITE = "perf-hello"
@@ -34,55 +32,24 @@ EXPECTED = "Hello! Nice to meet you."
 TIMEOUT_S = 120
 
 
-def _rss_bytes(ru_maxrss: int) -> int:
-    # Linux reports KiB, macOS reports bytes.
-    return ru_maxrss if os.uname().sysname == "Darwin" else ru_maxrss * 1024
-
-
 def run_once(agent: AgentConfig, mock: MockProvider) -> dict:
     with tempfile.TemporaryDirectory(prefix="flores-hello-") as tmp:
         cfg_dir, ws = Path(tmp, "config"), Path(tmp, "ws")
         cfg_dir.mkdir()
         ws.mkdir()
-        inv = agent.adapter.hello(HelloContext(mock.url, cfg_dir, ws, PROMPT, agent.model))
-        env = sanitized_env(inv.env)
+        inv = agent.adapter.invoke(RunContext(mock.url, cfg_dir, ws, PROMPT, agent.model))
         mock.reset()
-        out_path = Path(tmp, "stdout")
-        err_path = Path(tmp, "stderr")
-        with open(out_path, "w") as out, open(err_path, "w") as err:
-            t0 = time.perf_counter()
-            proc = subprocess.Popen(
-                inv.argv,
-                cwd=ws,
-                env=env,
-                stdout=out,
-                stderr=err,
-                stdin=subprocess.DEVNULL if inv.stdin_devnull else None,
-            )
-            deadline = t0 + TIMEOUT_S
-            while True:
-                pid, status, ru = os.wait4(proc.pid, os.WNOHANG)
-                if pid:
-                    break
-                if time.perf_counter() > deadline:
-                    proc.kill()
-                    pid, status, ru = os.wait4(proc.pid, 0)
-                    break
-                time.sleep(0.0005)
-            wall = time.perf_counter() - t0
-        proc.returncode = os.waitstatus_to_exitcode(status)
-        stdout = out_path.read_text(errors="replace")
-        stderr = err_path.read_text(errors="replace")
+        proc = run_measured(inv.argv, sanitized_env(inv.env), ws, TIMEOUT_S)
     records = mock.requests()
     llm = [r for r in records if r.get("protocol")]
     mock_ms = sum(r.get("duration_ms", 0) for r in records)
     return {
-        "exit_code": proc.returncode,
-        "ok": proc.returncode == 0 and EXPECTED in stdout,
-        "wall_ms": wall * 1000,
-        "cpu_ms": (ru.ru_utime + ru.ru_stime) * 1000,
-        "rss_mb": _rss_bytes(ru.ru_maxrss) / 2**20,
-        "harness_ms": max(0.0, wall * 1000 - mock_ms),
+        "exit_code": proc.exit_code,
+        "ok": proc.exit_code == 0 and EXPECTED in proc.stdout,
+        "wall_ms": proc.wall_ms,
+        "cpu_ms": proc.cpu_ms,
+        "rss_mb": proc.rss_mb,
+        "harness_ms": max(0.0, proc.wall_ms - mock_ms),
         "requests": len(records),
         "llm_requests": len(llm),
         "request_bytes": sum(r.get("request_bytes", 0) for r in llm),
@@ -90,7 +57,7 @@ def run_once(agent: AgentConfig, mock: MockProvider) -> dict:
         "tools": max((r.get("tools", 0) for r in llm), default=0),
         "protocols": sorted({r["protocol"] for r in llm}),
         "unknown_paths": sorted({r["path"] for r in records if not r.get("protocol")}),
-        "stderr_tail": stderr[-300:] if proc.returncode else "",
+        "stderr_tail": proc.stderr[-300:] if proc.exit_code else "",
     }
 
 
@@ -106,7 +73,7 @@ def run(agents: list[AgentConfig], runs: int, warmup: int, rounds: int, seed: in
             continue
         try:  # probe: does the adapter support this workload at all?
             with tempfile.TemporaryDirectory() as tmp:
-                by_name[name].adapter.hello(HelloContext("http://x", Path(tmp), Path(tmp), PROMPT, s.model or ""))
+                by_name[name].adapter.invoke(RunContext("http://x", Path(tmp), Path(tmp), PROMPT, s.model or ""))
             runnable.append(name)
         except Unsupported as e:
             s.available, s.skipped_reason = False, str(e)

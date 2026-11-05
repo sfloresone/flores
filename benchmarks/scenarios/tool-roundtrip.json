@@ -1,9 +1,0 @@
-{
-  "name": "tool-roundtrip",
-  "description": "Turn 1 asks for one shell tool call, turn 2 answers with text. Exercises the basic agent loop.",
-  "steps": [
-    { "tool_calls": [{ "name": "bash", "arguments": { "command": "ls" } }] },
-    { "text": "There are no files here." }
-  ],
-  "after_last": "error"
-}

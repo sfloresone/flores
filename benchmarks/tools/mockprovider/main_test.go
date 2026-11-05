@@ -257,3 +257,130 @@ func TestSplitRunes(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func faultScenario(t *testing.T) *Scenario {
+	t.Helper()
+	sc := &Scenario{
+		Name: "faults",
+		Steps: []Step{
+			{Text: "recovered", FailFirst: &FailFirst{Times: 2, Status: 503, RetryAfterS: 1}},
+			{Text: "abcdefghijklmnopqrstuvwxyz", Truncate: &Truncate{AfterChunks: 1, Times: 1}},
+			{ToolCalls: []ToolCall{{Name: "bash", RawArguments: `{"command": "ec`}}},
+			{Text: "ab", Repeat: 3},
+		},
+	}
+	sc.ChunkRunes = 4
+	if err := sc.validate(); err != nil {
+		t.Fatal(err)
+	}
+	return sc
+}
+
+func history(assistantTurns int) string {
+	msgs := []string{`{"role":"user","content":"go"}`}
+	for i := 0; i < assistantTurns; i++ {
+		msgs = append(msgs, `{"role":"assistant","content":"x"}`, `{"role":"user","content":"y"}`)
+	}
+	return "[" + strings.Join(msgs, ",") + "]"
+}
+
+func TestFailFirstThenSucceedWithRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(newServer(faultScenario(t), nil))
+	defer srv.Close()
+	body := `{"model":"x","messages":` + history(0) + `}`
+	for i, want := range []int{503, 503, 200, 200} {
+		resp := post(t, srv, "/v1/chat/completions", body)
+		if resp.StatusCode != want {
+			t.Fatalf("attempt %d: status %d, want %d", i+1, resp.StatusCode, want)
+		}
+		if want == 503 && resp.Header.Get("Retry-After") != "1" {
+			t.Errorf("attempt %d: missing Retry-After", i+1)
+		}
+	}
+	// Reset clears the attempt counters: the first request fails again.
+	post(t, srv, "/_mock/reset", "")
+	if resp := post(t, srv, "/v1/chat/completions", body); resp.StatusCode != 503 {
+		t.Errorf("after reset: status %d", resp.StatusCode)
+	}
+}
+
+func TestTruncateDropsStreamOnceAndIsRecorded(t *testing.T) {
+	srv := httptest.NewServer(newServer(faultScenario(t), nil))
+	defer srv.Close()
+	body := `{"model":"x","stream":true,"messages":` + history(1) + `}`
+
+	resp := post(t, srv, "/v1/chat/completions", body)
+	raw, err := io.ReadAll(resp.Body)
+	if err == nil && strings.Contains(string(raw), "[DONE]") {
+		t.Fatalf("first attempt should be cut, got full stream")
+	}
+	if strings.Contains(string(raw), "efgh") {
+		t.Errorf("truncated stream leaked later chunks: %q", raw)
+	}
+
+	resp = post(t, srv, "/v1/chat/completions", body)
+	raw, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(raw), "[DONE]") {
+		t.Errorf("retry should complete: %q", raw)
+	}
+
+	r, err := http.Get(srv.URL + "/_mock/requests")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	var recs []Record
+	_ = json.NewDecoder(r.Body).Decode(&recs)
+	if len(recs) != 2 || !recs[0].Truncated || recs[1].Truncated || recs[1].Attempt != 2 {
+		t.Errorf("records: %+v", recs)
+	}
+}
+
+func TestRawArgumentsAndRepeat(t *testing.T) {
+	srv := httptest.NewServer(newServer(faultScenario(t), nil))
+	defer srv.Close()
+	resp := post(t, srv, "/v1/chat/completions", `{"model":"x","messages":`+history(2)+`}`)
+	raw, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(raw), `"arguments":"{\"command\": \"ec"`) {
+		t.Errorf("raw arguments not sent verbatim: %s", raw)
+	}
+	// Anthropic non-streaming must stay valid JSON even with malformed args.
+	resp = post(t, srv, "/v1/messages", `{"model":"x","messages":`+history(2)+`}`)
+	if !json.Valid(mustRead(t, resp)) {
+		t.Error("anthropic body is not valid JSON")
+	}
+	resp = post(t, srv, "/v1/chat/completions", `{"model":"x","messages":`+history(3)+`}`)
+	if !strings.Contains(string(mustRead(t, resp)), `"content":"ababab"`) {
+		t.Error("repeat not applied")
+	}
+}
+
+func TestAdditionalToolsAndToolResultsCounted(t *testing.T) {
+	body := `{"model":"m","input":[
+	  {"type":"additional_tools","role":"developer","tools":[{"type":"function","name":"read"},
+	    {"type":"namespace","name":"functions","tools":[{"type":"function","name":"exec"},{"type":"function","name":"wait"}]}]},
+	  {"type":"message","role":"user","content":"hi"},
+	  {"type":"function_call","call_id":"a"},{"type":"function_call_output","call_id":"a","output":"x"}]}`
+	info, err := inspect(ProtoResponses, []byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Tools != 3 || info.ToolResults != 1 || info.Turn != 1 {
+		t.Errorf("%+v", info)
+	}
+	anth := `{"model":"m","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"tool_use"}]},
+	  {"role":"user","content":[{"type":"tool_result","tool_use_id":"t"},{"type":"tool_result","tool_use_id":"u"}]}]}`
+	info, _ = inspect(ProtoAnthropic, []byte(anth))
+	if info.ToolResults != 2 {
+		t.Errorf("anthropic tool results: %+v", info)
+	}
+}
+
+func mustRead(t *testing.T, resp *http.Response) []byte {
+	t.Helper()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}

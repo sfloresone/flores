@@ -2,8 +2,11 @@
 
 flores-bench doctor                       what is installed, which versions
 flores-bench build                        compile mock provider + flores-stub
+flores-bench pinned                       npm specs of the pinned competitor versions
 flores-bench perf startup [opts]          layer A: start-up latency/RSS
 flores-bench perf hello   [opts]          layer A: harness overhead per trivial turn
+flores-bench harness      [opts]          layer B: behaviour under scripted failures
+flores-bench scenarios [--write-docs]     list layer B scenarios / regenerate their docs
 flores-bench check-budgets RESULT.json    PASS/FAIL against suites/perf/budgets.toml
 flores-bench publish RESULT.json          copy into published/ + regenerate report
 flores-bench report                       regenerate published/README.md
@@ -97,12 +100,54 @@ def cmd_perf(args: argparse.Namespace) -> int:
     return 0 if ok or not args.enforce else 1
 
 
+def cmd_harness(args: argparse.Namespace) -> int:
+    from flores_bench.harness import runner, scenarios
+
+    build_tools()
+    agents = load_agents(args.agents.split(",") if args.agents else None)
+    selected = scenarios.load_all()
+    if args.scenarios:
+        wanted = set(args.scenarios.split(","))
+        unknown = wanted - {s.name for s in selected}
+        if unknown:
+            raise SystemExit(f"unknown scenarios: {', '.join(sorted(unknown))}")
+        selected = [s for s in selected if s.name in wanted]
+    print(f"harness: {len(selected)} scenarios × {args.runs} runs for {', '.join(a.adapter.name for a in agents)}")
+    result = runner.run(agents, selected, runs=args.runs)
+    path = _save(result, args.out)
+    print()
+    print(report.render_harness(result))
+    print(f"\nraw result: {path}")
+    ok = budgets.check_harness(result)
+    if args.publish:
+        print(f"published:  {report.publish(result)}")
+    return 0 if ok or not args.enforce else 1
+
+
+def cmd_scenarios(args: argparse.Namespace) -> int:
+    from flores_bench.harness import scenarios
+    from flores_bench.paths import BENCH_ROOT
+
+    all_ = scenarios.load_all()
+    if args.write_docs:
+        out = BENCH_ROOT / "docs" / "harness-scenarios.md"
+        out.write_text(scenarios.render_docs(all_))
+        print(out)
+        return 0
+    for s in all_:
+        print(f"{s.category:<16} {s.name:<28} {s.title}")
+    return 0
+
+
 def cmd_check_budgets(args: argparse.Namespace) -> int:
     ok = True
     for f in args.results:
         result = json.loads(Path(f).read_text())
         print(f"{result['suite']} ({result['machine']['platform']}): {f}")
-        ok &= budgets.check(result, enforce=True if args.force else None)
+        if result["suite"] == "harness":
+            ok &= budgets.check_harness(result)
+        else:
+            ok &= budgets.check(result, enforce=True if args.force else None)
     return 0 if ok else 1
 
 
@@ -150,6 +195,19 @@ def build_parser() -> argparse.ArgumentParser:
     perf.add_argument("--publish", action="store_true", help="also write into published/")
     perf.add_argument("--enforce", action="store_true", help="exit 1 when an enforced budget fails")
     perf.set_defaults(fn=cmd_perf)
+
+    hb = sub.add_parser("harness", help="layer B: harness behaviour scenarios")
+    hb.add_argument("--agents", help="comma-separated subset (default: all in agents.toml)")
+    hb.add_argument("--scenarios", help="comma-separated subset of scenario names")
+    hb.add_argument("--runs", type=int, default=1, help="runs per scenario; all must pass")
+    hb.add_argument("--out", type=Path)
+    hb.add_argument("--publish", action="store_true")
+    hb.add_argument("--enforce", action="store_true", help="exit 1 if a gated agent regresses (budgets.toml)")
+    hb.set_defaults(fn=cmd_harness)
+
+    sc = sub.add_parser("scenarios", help="list layer B scenarios")
+    sc.add_argument("--write-docs", action="store_true", help="regenerate docs/harness-scenarios.md")
+    sc.set_defaults(fn=cmd_scenarios)
 
     cb = sub.add_parser("check-budgets", help="check result files against budgets.toml")
     cb.add_argument("results", nargs="+")

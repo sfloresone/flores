@@ -1,0 +1,27 @@
+{
+  "name": "auth-error-fail-fast",
+  "title": "401: fallar rápido y sin reintentos",
+  "category": "provider-errors",
+  "why": "Una clave inválida no se arregla reintentando. Reintentar con backoff hace esperar al usuario minutos para nada.",
+  "prompt": "Say something.",
+  "timeout_s": 60,
+  "mock": {
+    "steps": [
+      {
+        "error": {
+          "status": 401,
+          "type": "authentication_error",
+          "message": "invalid x-api-key (mock)"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "exit": "nonzero",
+    "llm_requests": {
+      "min": 1,
+      "max": 1
+    },
+    "max_wall_ms": 10000
+  }
+}

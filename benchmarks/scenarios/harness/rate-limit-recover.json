@@ -1,0 +1,36 @@
+{
+  "name": "rate-limit-recover",
+  "title": "429 transitorio: reintentar respetando Retry-After",
+  "category": "provider-errors",
+  "why": "Los proveedores devuelven 429 con frecuencia. El agente debe reintentar (respetando Retry-After) y terminar la tarea, sin mostrar el error al usuario.",
+  "prompt": "Say something.",
+  "timeout_s": 60,
+  "mock": {
+    "steps": [
+      {
+        "text": "Recovered after rate limit.",
+        "fail_first": {
+          "times": 2,
+          "status": 429,
+          "type": "rate_limit_error",
+          "retry_after_s": 1
+        }
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Recovered after rate limit."
+    ],
+    "retries": {
+      "min": 2,
+      "max": 2
+    },
+    "llm_requests": {
+      "min": 3,
+      "max": 3
+    },
+    "max_wall_ms": 30000
+  }
+}

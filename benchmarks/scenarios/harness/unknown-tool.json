@@ -1,0 +1,38 @@
+{
+  "name": "unknown-tool",
+  "title": "El modelo pide una tool que no existe",
+  "category": "tools",
+  "why": "Los modelos alucinan nombres de tools. El agente no debe romperse: tiene que devolver un error como resultado de la tool y dejar que el modelo se corrija.",
+  "prompt": "Do the task.",
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "name": "flores_does_not_exist",
+            "arguments": {
+              "x": 1
+            }
+          }
+        ]
+      },
+      {
+        "text": "Recovered from unknown tool."
+      }
+    ],
+    "after_last": "error"
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Recovered from unknown tool."
+    ],
+    "llm_requests": {
+      "min": 2,
+      "max": 2
+    },
+    "tool_results": {
+      "min": 1
+    }
+  }
+}
