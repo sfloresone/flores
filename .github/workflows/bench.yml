@@ -1,0 +1,120 @@
+name: Benchmarks
+
+# Layer A (perf) benchmarks on the Linux reference platform.
+#
+# - pull_request: tests + benchmarks + budget gate; results uploaded as an artifact.
+# - push to main: same, then the compact results are published into
+#   benchmarks/published/ and committed back ([skip ci]) so they are versioned
+#   and the website can read them.
+# - workflow_dispatch: manual run (e.g. after bumping a competitor version).
+#
+# No step here talks to a real model: every agent runs against the mock provider.
+
+on:
+  push:
+    branches: [main]
+    paths: ["benchmarks/**", ".github/workflows/bench.yml"]
+  pull_request:
+    paths: ["benchmarks/**", ".github/workflows/bench.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HYPERFINE_VERSION: "2.0.0"
+
+defaults:
+  run:
+    working-directory: benchmarks
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/go.mod
+          cache-dependency-path: benchmarks/go.mod
+      - uses: astral-sh/setup-uv@v5
+      - name: Go vet + tests
+        run: go vet ./... && go test ./...
+      - name: Python lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Python tests
+        run: uv run pytest -q
+
+  perf:
+    name: Perf (linux reference)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used to commit published results on main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/go.mod
+          cache-dependency-path: benchmarks/go.mod
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install hyperfine
+        run: |
+          wget -q "https://github.com/sharkdp/hyperfine/releases/download/v${HYPERFINE_VERSION}/hyperfine_${HYPERFINE_VERSION}_amd64.deb"
+          sudo dpkg -i "hyperfine_${HYPERFINE_VERSION}_amd64.deb"
+
+      - name: Install competitor agents (pinned versions from suites/perf/agents.toml)
+        continue-on-error: true
+        run: |
+          for spec in $(uv run flores-bench pinned); do
+            npm install -g "$spec" || echo "::warning::could not install $spec"
+          done
+
+      - name: Install fx
+        continue-on-error: true
+        run: |
+          curl -fsSL https://fx.sh/setup.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Doctor
+        run: uv run flores-bench doctor
+
+      - name: perf startup
+        run: uv run flores-bench perf startup --out results/startup.json
+
+      - name: perf hello
+        run: uv run flores-bench perf hello --out results/hello.json
+
+      - name: Enforce budgets
+        run: uv run flores-bench check-budgets results/startup.json results/hello.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results-${{ github.sha }}
+          path: benchmarks/results/*.json
+          if-no-files-found: warn
+
+      - name: Publish and commit results
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          uv run flores-bench publish results/startup.json results/hello.json
+          git config user.name "flores-bench[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add published
+          if git diff --cached --quiet; then
+            echo "no changes to publish"
+            exit 0
+          fi
+          git commit -m "bench: publish linux results for ${GITHUB_SHA::10} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

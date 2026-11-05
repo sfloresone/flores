@@ -1,0 +1,17 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Benchmarks: compiled helpers and raw results (regenerated; CI uploads them as artifacts).
+# Compact results that we version live in benchmarks/published/.
+benchmarks/.bin/
+benchmarks/results/*
+!benchmarks/results/.gitkeep

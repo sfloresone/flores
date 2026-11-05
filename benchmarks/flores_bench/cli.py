@@ -1,0 +1,186 @@
+"""flores-bench command line.
+
+flores-bench doctor                       what is installed, which versions
+flores-bench build                        compile mock provider + flores-stub
+flores-bench perf startup [opts]          layer A: start-up latency/RSS
+flores-bench perf hello   [opts]          layer A: harness overhead per trivial turn
+flores-bench check-budgets RESULT.json    PASS/FAIL against suites/perf/budgets.toml
+flores-bench publish RESULT.json          copy into published/ + regenerate report
+flores-bench report                       regenerate published/README.md
+flores-bench trajectory validate FILE     check a trajectory/v0 JSONL file
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+
+from flores_bench import budgets, report
+from flores_bench.build import build_tools
+from flores_bench.config import load_agents
+from flores_bench.envinfo import machine_info, platform_key, tool_versions
+from flores_bench.paths import RESULTS_DIR
+
+
+def _save(result: dict, out: Path | None) -> Path:
+    if out is None:
+        stamp = result["created_at"].replace(":", "").replace("-", "")
+        out = RESULTS_DIR / result["suite"] / f"{stamp}-{platform_key()}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result, indent=2) + "\n")
+    return out
+
+
+def _print_summary(result: dict) -> None:
+    print()
+    print(report.render_table(report.compact(result)))
+    print()
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    print("machine:", json.dumps(machine_info()))
+    print("tools:  ", json.dumps(tool_versions()))
+    print()
+    print(f"{'agent':<14} {'installed':<10} {'version':<12} {'pinned':<10} model")
+    for a in load_agents():
+        ad = a.adapter
+        v = ad.version() if ad.available() else None
+        mark = "" if not (v and a.pinned_version and v != a.pinned_version) else "  ⚠ version differs"
+        print(
+            f"{ad.name:<14} {'yes' if ad.available() else 'no':<10} {v or '-':<12} "
+            f"{a.pinned_version or '-':<10} {a.model}{mark}"
+        )
+    missing = [t for t in ("go", "hyperfine", "docker") if not shutil.which(t)]
+    if missing:
+        print("\nmissing tools:", ", ".join(missing))
+    return 0
+
+
+def cmd_pinned(args: argparse.Namespace) -> int:
+    """Print `package@version` for every npm-installable agent (used by CI)."""
+    for a in load_agents():
+        if a.npm and a.pinned_version:
+            print(f"{a.npm}@{a.pinned_version}")
+    return 0
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    build_tools()
+    print("built benchmarks/.bin/{mockprovider,flores-stub}")
+    return 0
+
+
+def cmd_perf(args: argparse.Namespace) -> int:
+    from flores_bench.perf import hello, startup
+
+    build_tools()
+    agents = load_agents(args.agents.split(",") if args.agents else None)
+    if args.quick:
+        args.runs, args.warmup, args.rounds = max(1, args.runs // 5), 1, 1
+    print(
+        f"{args.suite}: {args.rounds} rounds × {args.runs} runs (+{args.warmup} warmup) "
+        f"for {', '.join(a.adapter.name for a in agents)}"
+    )
+    if args.suite == "startup":
+        result = startup.run(agents, args.runs, args.warmup, args.rounds, args.seed)
+    else:
+        result = hello.run(agents, args.runs, args.warmup, args.rounds, args.seed)
+    path = _save(result, args.out)
+    _print_summary(result)
+    print(f"raw result: {path}")
+    ok = budgets.check(result)
+    if args.publish:
+        print(f"published:  {report.publish(result)}")
+    return 0 if ok or not args.enforce else 1
+
+
+def cmd_check_budgets(args: argparse.Namespace) -> int:
+    ok = True
+    for f in args.results:
+        result = json.loads(Path(f).read_text())
+        print(f"{result['suite']} ({result['machine']['platform']}): {f}")
+        ok &= budgets.check(result, enforce=True if args.force else None)
+    return 0 if ok else 1
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    for f in args.results:
+        print(report.publish(json.loads(Path(f).read_text())))
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    print(report.write_readme())
+    return 0
+
+
+def cmd_trajectory(args: argparse.Namespace) -> int:
+    from flores_bench import trajectory
+
+    errors = trajectory.validate_file(Path(args.file))
+    if errors:
+        print("\n".join(errors))
+        return 1
+    events, _ = trajectory.parse_lines(Path(args.file).read_text().splitlines())
+    print("valid trajectory/v0")
+    print(json.dumps(trajectory.summarize(events), indent=2))
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="flores-bench", description="flores benchmark suite")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("doctor", help="show installed agents and tools").set_defaults(fn=cmd_doctor)
+    sub.add_parser("build", help="build Go helper binaries").set_defaults(fn=cmd_build)
+    sub.add_parser("pinned", help="print pinned npm specs of competitor agents").set_defaults(fn=cmd_pinned)
+
+    perf = sub.add_parser("perf", help="layer A performance suites")
+    perf.add_argument("suite", choices=["startup", "hello"])
+    perf.add_argument("--agents", help="comma-separated subset (default: all in agents.toml)")
+    perf.add_argument("--runs", type=int, default=None, help="runs per round")
+    perf.add_argument("--warmup", type=int, default=None)
+    perf.add_argument("--rounds", type=int, default=3, help="shuffled rounds (default 3)")
+    perf.add_argument("--seed", type=int, default=0)
+    perf.add_argument("--quick", action="store_true", help="smoke run: few runs, 1 round")
+    perf.add_argument("--out", type=Path)
+    perf.add_argument("--publish", action="store_true", help="also write into published/")
+    perf.add_argument("--enforce", action="store_true", help="exit 1 when an enforced budget fails")
+    perf.set_defaults(fn=cmd_perf)
+
+    cb = sub.add_parser("check-budgets", help="check result files against budgets.toml")
+    cb.add_argument("results", nargs="+")
+    cb.add_argument("--force", action="store_true", help="enforce even off the reference platform")
+    cb.set_defaults(fn=cmd_check_budgets)
+
+    pub = sub.add_parser("publish", help="publish result files into published/")
+    pub.add_argument("results", nargs="+")
+    pub.set_defaults(fn=cmd_publish)
+
+    sub.add_parser("report", help="regenerate published/README.md").set_defaults(fn=cmd_report)
+
+    tr = sub.add_parser("trajectory", help="trajectory/v0 tools")
+    tr_sub = tr.add_subparsers(dest="action", required=True)
+    tv = tr_sub.add_parser("validate")
+    tv.add_argument("file")
+    tv.set_defaults(fn=cmd_trajectory)
+    return p
+
+
+DEFAULTS = {"startup": (30, 5), "hello": (5, 1)}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.cmd == "perf":
+        runs, warmup = DEFAULTS[args.suite]
+        args.runs = args.runs if args.runs is not None else runs
+        args.warmup = args.warmup if args.warmup is not None else warmup
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

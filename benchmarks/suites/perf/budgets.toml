@@ -1,0 +1,19 @@
+# Performance budgets. A budget is a hard limit that fails CI when exceeded.
+#
+# Budgets are enforced only on the reference platform (Linux, GitHub Actions
+# ubuntu-latest), like fx does: macOS and laptop timings are reported but too
+# noisy to gate on. Budgets apply to our own binaries only; competitors are
+# measured, never gated.
+#
+# Metric keys are "<metric>.<stat>" from the result file, e.g. wall_ms.p50.
+# Initial values are deliberately loose; tighten them as the real agent lands
+# (fx gates its CLI start-up at 2 ms on Linux).
+
+[perf-startup.flores-stub]
+"wall_ms.p50" = 5.0
+"rss_mb.p50" = 20.0
+
+[perf-hello.flores-stub]
+"wall_ms.p50" = 50.0
+"rss_mb.p50" = 30.0
+"request_bytes.p50" = 4096

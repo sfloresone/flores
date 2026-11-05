@@ -1,0 +1,32 @@
+# Harnesses measured by the perf suites.
+#
+# `model` only selects which prompts/tools the harness builds: every request
+# is answered by the mock provider, so no tokens are spent. Use a real model id
+# the harness knows; unknown ids make some harnesses fall back to generic
+# metadata (Claude Code changes its system prompt per model, for example).
+#
+# `version` is the version the published reference numbers were taken with.
+# Other installed versions still run, but the result is flagged as a mismatch.
+# CI installs exactly these versions.
+
+[agents.flores-stub]
+model = "gpt-6.1-sol"
+
+[agents.pi]
+version = "1.5.0"
+npm = "@earendil-works/pi-coding-agent"
+model = "openai/gpt-6.1-sol"
+
+[agents.claude-code]
+version = "2.1.318"
+npm = "@anthropic-ai/claude-code"
+model = "claude-sonnet-5-5"
+
+[agents.codex]
+version = "0.164.0"
+npm = "@openai/codex"
+model = "gpt-6.1-sol"
+
+[agents.fx]
+# Install: curl -fsSL https://fx.sh/setup.sh | bash
+model = "openai/gpt-6.1-sol"

@@ -1,0 +1,382 @@
+{
+  "schema_version": "result/v0",
+  "suite": "perf-startup",
+  "created_at": "2026-11-05T13:40:41Z",
+  "git": {
+    "sha": null,
+    "short": null,
+    "branch": null,
+    "dirty": true
+  },
+  "machine": {
+    "platform": "darwin-arm64",
+    "os": "Darwin",
+    "os_release": "25.5.0",
+    "cpu": "Apple M5",
+    "cores": 10,
+    "mem_bytes": 25769803776,
+    "ci": false,
+    "runner": null
+  },
+  "tools": {
+    "python": "3.15.2",
+    "go": "go version go1.27.1 darwin/arm64",
+    "hyperfine": "hyperfine 2.0.0",
+    "docker": "Docker version 29.8.1, build 4a63305d74"
+  },
+  "params": {
+    "runs_per_round": 30,
+    "warmup": 5,
+    "rounds": 3,
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "name": "process-baseline",
+      "label": "process baseline (true)",
+      "available": true,
+      "version": "-",
+      "pinned_version": null,
+      "version_mismatch": false,
+      "model": null,
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 0.9127874222222222,
+          "stddev": 0.03649684269951593,
+          "min": 0.769667,
+          "p50": 0.9037705,
+          "p95": 0.9805831500000001,
+          "max": 1.086958,
+          "ci95_p50": [
+            0.89725,
+            0.9132500000000001
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 0.5540111111111111,
+          "stddev": 0.025762743958663445,
+          "min": 0.5139999999999999,
+          "p50": 0.549,
+          "p95": 0.6005999999999999,
+          "max": 0.6509999999999999,
+          "ci95_p50": [
+            0.5419999999999999,
+            0.554
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 1.140625,
+          "stddev": 0.0,
+          "min": 1.140625,
+          "p50": 1.140625,
+          "p95": 1.140625,
+          "max": 1.140625,
+          "ci95_p50": [
+            1.140625,
+            1.140625
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "true"
+        ],
+        "failures": 0
+      }
+    },
+    {
+      "name": "flores-stub",
+      "label": "flores-stub",
+      "available": true,
+      "version": "0.0.0-stub",
+      "pinned_version": null,
+      "version_mismatch": false,
+      "model": "gpt-6.1-sol",
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 3.0898194333333335,
+          "stddev": 0.19589520949830078,
+          "min": 2.5903750000000003,
+          "p50": 3.1248125,
+          "p95": 3.34367295,
+          "max": 3.528667,
+          "ci95_p50": [
+            3.1011040000000003,
+            3.149604
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 2.1684444444444444,
+          "stddev": 0.08314953513705363,
+          "min": 2.013,
+          "p50": 2.162,
+          "p95": 2.32545,
+          "max": 2.4450000000000003,
+          "ci95_p50": [
+            2.142,
+            2.182
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 10.03142361111111,
+          "stddev": 0.060876673241558016,
+          "min": 9.890625,
+          "p50": 10.015625,
+          "p95": 10.14921875,
+          "max": 10.1875,
+          "ci95_p50": [
+            10.0,
+            10.015625
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "flores-stub",
+          "version"
+        ],
+        "failures": 0
+      }
+    },
+    {
+      "name": "pi",
+      "label": "Pi",
+      "available": true,
+      "version": "1.5.0",
+      "pinned_version": "1.5.0",
+      "version_mismatch": false,
+      "model": "openai/gpt-6.1-sol",
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 121.09837774444445,
+          "stddev": 1.8179832900251234,
+          "min": 117.075792,
+          "p50": 120.979687,
+          "p95": 124.3485356,
+          "max": 129.7095,
+          "ci95_p50": [
+            120.53633400000001,
+            121.1325625
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 127.83668888888889,
+          "stddev": 1.6246668086721638,
+          "min": 125.437,
+          "p50": 127.566,
+          "p95": 130.33509999999998,
+          "max": 137.94799999999998,
+          "ci95_p50": [
+            127.297,
+            127.93299999999999
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 103.53420138888889,
+          "stddev": 0.2166190149675721,
+          "min": 102.96875,
+          "p50": 103.546875,
+          "p95": 103.82109375,
+          "max": 104.0,
+          "ci95_p50": [
+            103.5078125,
+            103.59375
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "pi",
+          "--version"
+        ],
+        "failures": 0
+      }
+    },
+    {
+      "name": "claude-code",
+      "label": "Claude Code",
+      "available": true,
+      "version": "2.1.318",
+      "pinned_version": "2.1.318",
+      "version_mismatch": false,
+      "model": "claude-sonnet-5-5",
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 8.618651366666667,
+          "stddev": 0.3378965412039692,
+          "min": 7.748,
+          "p50": 8.586396,
+          "p95": 9.19415395,
+          "max": 9.818208,
+          "ci95_p50": [
+            8.508708,
+            8.658542
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 6.45901111111111,
+          "stddev": 0.30349405319477724,
+          "min": 6.028,
+          "p50": 6.388999999999999,
+          "p95": 7.0352,
+          "max": 7.476,
+          "ci95_p50": [
+            6.325,
+            6.4515125
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 23.19704861111111,
+          "stddev": 0.0149419604482838,
+          "min": 23.171875,
+          "p50": 23.1875,
+          "p95": 23.22734375,
+          "max": 23.25,
+          "ci95_p50": [
+            23.1875,
+            23.203125
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "claude",
+          "--version"
+        ],
+        "failures": 0
+      }
+    },
+    {
+      "name": "codex",
+      "label": "Codex",
+      "available": true,
+      "version": "0.164.0",
+      "pinned_version": "0.164.0",
+      "version_mismatch": false,
+      "model": "gpt-6.1-sol",
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 5.9442064777777786,
+          "stddev": 0.36712742792779945,
+          "min": 5.432542000000001,
+          "p50": 5.8820215000000005,
+          "p95": 6.6341939000000005,
+          "max": 7.167542000000001,
+          "ci95_p50": [
+            5.747854500000001,
+            6.00375
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 5.2332,
+          "stddev": 0.29657710974124746,
+          "min": 4.867999999999999,
+          "p50": 5.1245,
+          "p95": 5.9049,
+          "max": 6.007999999999999,
+          "ci95_p50": [
+            5.076,
+            5.228999999999999
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 19.02951388888889,
+          "stddev": 0.031201194722676035,
+          "min": 18.984375,
+          "p50": 19.03125,
+          "p95": 19.08671875,
+          "max": 19.109375,
+          "ci95_p50": [
+            19.015625,
+            19.03125
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "codex",
+          "--version"
+        ],
+        "failures": 0
+      }
+    },
+    {
+      "name": "fx",
+      "label": "fx",
+      "available": true,
+      "version": "0.0.16",
+      "pinned_version": null,
+      "version_mismatch": false,
+      "model": "openai/gpt-6.1-sol",
+      "skipped_reason": null,
+      "metrics": {
+        "wall_ms": {
+          "n": 90,
+          "mean": 2.040519,
+          "stddev": 0.1407682669522559,
+          "min": 1.509667,
+          "p50": 2.0617920000000005,
+          "p95": 2.1890984,
+          "max": 2.289625,
+          "ci95_p50": [
+            2.045146,
+            2.0760420250000005
+          ]
+        },
+        "cpu_ms": {
+          "n": 90,
+          "mean": 1.0417666666666667,
+          "stddev": 0.04680489026596461,
+          "min": 0.9399999999999998,
+          "p50": 1.033,
+          "p95": 1.1291,
+          "max": 1.147,
+          "ci95_p50": [
+            1.0265,
+            1.0510000000000002
+          ]
+        },
+        "rss_mb": {
+          "n": 90,
+          "mean": 2.1119791666666665,
+          "stddev": 0.005855716320280167,
+          "min": 2.109375,
+          "p50": 2.109375,
+          "p95": 2.125,
+          "max": 2.125,
+          "ci95_p50": [
+            2.109375,
+            2.109375
+          ]
+        }
+      },
+      "info": {
+        "argv": [
+          "fx",
+          "--version"
+        ],
+        "failures": 0
+      }
+    }
+  ]
+}

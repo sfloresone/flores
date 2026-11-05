@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sfloresone/flores/benchmarks/schema/trajectory.v0.schema.json",
+  "title": "flores trajectory event (v0)",
+  "description": "One line of the JSONL stream that `flores run --output jsonl` writes to stdout. See benchmarks/docs/trajectory-schema.md.",
+  "type": "object",
+  "required": ["seq", "t_ms", "type"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 0, "description": "0-based, strictly increasing by 1." },
+    "t_ms": { "type": "number", "minimum": 0, "description": "Milliseconds since the process started the session (monotonic clock)." },
+    "type": {
+      "enum": [
+        "session.start", "turn.start", "llm.request", "llm.response", "message",
+        "tool.call", "tool.result", "context.compact", "error", "session.end"
+      ]
+    }
+  },
+  "$defs": {
+    "usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cache_read_tokens": { "type": "integer", "minimum": 0 },
+        "cache_write_tokens": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "turn": { "type": "integer", "minimum": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "session.start" } } },
+      "then": {
+        "required": ["schema_version", "agent", "model", "provider", "cwd", "started_at"],
+        "properties": {
+          "schema_version": { "const": "trajectory/v0" },
+          "agent": {
+            "type": "object",
+            "required": ["name", "version"],
+            "properties": { "name": { "type": "string" }, "version": { "type": "string" } }
+          },
+          "model": { "type": "string" },
+          "provider": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "protocol": { "enum": ["openai-chat", "openai-responses", "anthropic-messages", "other"] },
+              "base_url": { "type": "string" }
+            }
+          },
+          "cwd": { "type": "string" },
+          "started_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "turn.start" } } },
+      "then": { "required": ["turn"], "properties": { "turn": { "$ref": "#/$defs/turn" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "llm.request" } } },
+      "then": {
+        "required": ["turn", "request_bytes", "messages", "tools", "system_bytes"],
+        "properties": {
+          "turn": { "$ref": "#/$defs/turn" },
+          "request_bytes": { "type": "integer", "minimum": 0 },
+          "messages": { "type": "integer", "minimum": 0 },
+          "tools": { "type": "integer", "minimum": 0 },
+          "system_bytes": { "type": "integer", "minimum": 0 },
+          "attempt": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "llm.response" } } },
+      "then": {
+        "required": ["turn", "status", "duration_ms"],
+        "properties": {
+          "turn": { "$ref": "#/$defs/turn" },
+          "status": { "enum": ["ok", "error"] },
+          "http_status": { "type": "integer" },
+          "ttft_ms": { "type": ["number", "null"], "minimum": 0 },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "stop_reason": { "type": ["string", "null"] },
+          "usage": { "$ref": "#/$defs/usage" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "message" } } },
+      "then": {
+        "required": ["turn", "role", "text"],
+        "properties": {
+          "turn": { "$ref": "#/$defs/turn" },
+          "role": { "enum": ["assistant", "user", "system"] },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "tool.call" } } },
+      "then": {
+        "required": ["turn", "id", "name", "arguments"],
+        "properties": {
+          "turn": { "$ref": "#/$defs/turn" },
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "tool.result" } } },
+      "then": {
+        "required": ["turn", "id", "ok", "duration_ms", "output_bytes"],
+        "properties": {
+          "turn": { "$ref": "#/$defs/turn" },
+          "id": { "type": "string", "minLength": 1 },
+          "ok": { "type": "boolean" },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "output_bytes": { "type": "integer", "minimum": 0 },
+          "error": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "context.compact" } } },
+      "then": {
+        "required": ["before_tokens", "after_tokens"],
+        "properties": {
+          "before_tokens": { "type": "integer", "minimum": 0 },
+          "after_tokens": { "type": "integer", "minimum": 0 },
+          "strategy": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "error" } } },
+      "then": {
+        "required": ["kind", "message", "retryable"],
+        "properties": {
+          "kind": { "enum": ["provider", "tool", "limit", "internal"] },
+          "message": { "type": "string" },
+          "retryable": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "session.end" } } },
+      "then": {
+        "required": ["status", "turns", "duration_ms", "usage", "tool_calls", "tool_errors"],
+        "properties": {
+          "status": { "enum": ["success", "error", "max_turns", "cancelled"] },
+          "turns": { "type": "integer", "minimum": 0 },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "usage": { "$ref": "#/$defs/usage" },
+          "tool_calls": { "type": "integer", "minimum": 0 },
+          "tool_errors": { "type": "integer", "minimum": 0 },
+          "final_text": { "type": "string" }
+        }
+      }
+    }
+  ]
+}
