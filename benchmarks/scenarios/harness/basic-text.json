@@ -1,0 +1,24 @@
+{
+  "name": "basic-text",
+  "title": "Respuesta de texto simple",
+  "category": "basics",
+  "why": "Control de cordura: un prompt, una petición, el texto llega intacto a stdout. Si esto falla, el resto de resultados no es fiable.",
+  "prompt": "Say hello.",
+  "mock": {
+    "steps": [
+      {
+        "text": "Hello from the mock provider."
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Hello from the mock provider."
+    ],
+    "llm_requests": {
+      "min": 1,
+      "max": 1
+    }
+  }
+}

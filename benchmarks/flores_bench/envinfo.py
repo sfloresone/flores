@@ -62,7 +62,10 @@ def git_info() -> dict:
         "sha": sha,
         "short": sha[:10] if sha else None,
         "branch": _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-        "dirty": bool(_run(["git", "status", "--porcelain"])),
+        # Generated benchmark output must not mark the measured code as modified.
+        "dirty": bool(
+            _run(["git", "status", "--porcelain", "--", ".", ":!benchmarks/published", ":!benchmarks/results"])
+        ),
     }
 
 

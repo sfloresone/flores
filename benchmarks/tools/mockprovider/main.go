@@ -48,6 +48,10 @@ type Record struct {
 	Status     int     `json:"status"`
 	DurationMs float64 `json:"duration_ms"`
 	UserAgent  string  `json:"user_agent,omitempty"`
+	// Attempt is 1 for the first request of a turn, 2 for its first retry...
+	Attempt int `json:"attempt,omitempty"`
+	// Truncated is true when the mock dropped the connection on purpose.
+	Truncated bool `json:"truncated,omitempty"`
 	RequestInfo
 }
 
@@ -55,16 +59,27 @@ type server struct {
 	scenario *Scenario
 	seq      atomic.Int64
 
-	mu      sync.Mutex
-	records []Record
-	logFile io.Writer
+	mu       sync.Mutex
+	records  []Record
+	attempts map[int]int // requests seen per turn since the last reset
+	logFile  io.Writer
 	// dumpDir, when set, receives every request body as <seq>.json so the
 	// exact prompt and tool definitions each harness sends can be inspected.
 	dumpDir string
 }
 
 func newServer(sc *Scenario, logFile io.Writer) *server {
-	return &server{scenario: sc, logFile: logFile}
+	return &server{scenario: sc, logFile: logFile, attempts: map[int]int{}}
+}
+
+// attempt counts requests per conversation turn. Retries re-send the same
+// history, so they land on the same turn; that is how fail_first and truncate
+// know whether this is a first try or a retry. Benchmarks reset between runs.
+func (s *server) attempt(turn int) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.attempts[turn]++
+	return s.attempts[turn]
 }
 
 func (s *server) record(rec Record) {
@@ -120,6 +135,19 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	control := strings.HasPrefix(req.URL.Path, "/_mock/") || req.URL.Path == "/healthz"
 
+	defer func() {
+		// A deliberate connection drop: still record the request, then let
+		// net/http abort the connection.
+		if p := recover(); p != nil {
+			if p == errTruncated {
+				rec.Status = http.StatusOK
+				rec.Truncated = true
+				rec.DurationMs = float64(time.Since(start).Microseconds()) / 1000
+				s.record(rec)
+			}
+			panic(p)
+		}
+	}()
 	s.route(sw, req, &rec)
 
 	if control {
@@ -148,6 +176,7 @@ func (s *server) route(w *statusWriter, req *http.Request, rec *Record) {
 	case path == "/_mock/reset" && req.Method == http.MethodPost:
 		s.mu.Lock()
 		s.records = nil
+		s.attempts = map[int]int{}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
@@ -197,15 +226,36 @@ func (s *server) route(w *statusWriter, req *http.Request, rec *Record) {
 	}
 
 	step := s.scenario.pick(info.Turn)
+	rec.Attempt = s.attempt(info.Turn)
 	if step == nil {
 		writeError(w, proto, &StepError{Status: 500, Type: "scenario_exhausted",
 			Message: fmt.Sprintf("scenario %q has no step %d", s.scenario.Name, info.Turn)})
 		return
 	}
+	ttft := time.Duration(s.scenario.Latency.TTFTMs) * time.Millisecond
+	if step.TTFTMs != nil {
+		ttft = time.Duration(*step.TTFTMs) * time.Millisecond
+	}
 	if step.Error != nil {
-		time.Sleep(time.Duration(s.scenario.Latency.TTFTMs) * time.Millisecond)
+		time.Sleep(ttft)
 		writeError(w, proto, step.Error)
 		return
+	}
+	if f := step.FailFirst; f != nil && rec.Attempt <= f.Times {
+		time.Sleep(ttft)
+		if f.RetryAfterS > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(f.RetryAfterS))
+		}
+		msg := f.Message
+		if msg == "" {
+			msg = fmt.Sprintf("mock transient error (attempt %d of %d failing)", rec.Attempt, f.Times)
+		}
+		writeError(w, proto, &StepError{Status: f.Status, Type: f.Type, Message: msg})
+		return
+	}
+	truncateAfter := -1
+	if t := step.Truncate; t != nil && (t.Times == 0 || rec.Attempt <= t.Times) {
+		truncateAfter = t.AfterChunks
 	}
 
 	model := info.Model
@@ -213,13 +263,14 @@ func (s *server) route(w *statusWriter, req *http.Request, rec *Record) {
 		model = s.scenario.Model
 	}
 	r := &reply{
-		id:         strconv.FormatInt(rec.Seq, 10),
-		model:      model,
-		step:       step,
-		usage:      usageFor(step, info),
-		chunkRunes: s.scenario.ChunkRunes,
-		ttft:       time.Duration(s.scenario.Latency.TTFTMs) * time.Millisecond,
-		chunkDelay: time.Duration(s.scenario.Latency.ChunkDelayMs) * time.Millisecond,
+		id:            strconv.FormatInt(rec.Seq, 10),
+		model:         model,
+		step:          step,
+		usage:         usageFor(step, info),
+		chunkRunes:    s.scenario.ChunkRunes,
+		ttft:          ttft,
+		chunkDelay:    time.Duration(s.scenario.Latency.ChunkDelayMs) * time.Millisecond,
+		truncateAfter: truncateAfter,
 	}
 	switch proto {
 	case ProtoChat:
@@ -244,7 +295,7 @@ func usageFor(step *Step, info RequestInfo) Usage {
 	u := Usage{InputTokens: estimateTokens(info.RequestBytes)}
 	out := len(step.Text)
 	for _, tc := range step.ToolCalls {
-		out += len(tc.Name) + len(tc.Arguments)
+		out += len(tc.Name) + len(tc.args())
 	}
 	u.OutputTokens = max(1, estimateTokens(out))
 	if step.Usage != nil {

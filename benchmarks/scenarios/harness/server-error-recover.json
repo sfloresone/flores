@@ -1,0 +1,30 @@
+{
+  "name": "server-error-recover",
+  "title": "503 transitorio: reintentar",
+  "category": "provider-errors",
+  "why": "Los errores 5xx y de sobrecarga son transitorios. Un solo fallo no debe tumbar la sesión.",
+  "prompt": "Say something.",
+  "mock": {
+    "steps": [
+      {
+        "text": "Recovered after server error.",
+        "fail_first": {
+          "times": 1,
+          "status": 503,
+          "type": "overloaded_error"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Recovered after server error."
+    ],
+    "retries": {
+      "min": 1,
+      "max": 1
+    },
+    "max_wall_ms": 30000
+  }
+}

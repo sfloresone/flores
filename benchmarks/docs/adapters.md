@@ -34,10 +34,12 @@ Para todos los agentes:
 2. **Claude Code cambia el system prompt según el modelo.** Con un ID que no
    conoce avisa (`unrecognized_model`) y usa otro prompt (5,8 KB frente a
    8,7 KB). Por eso usamos IDs reales.
-3. **El número de tools depende del modelo.** Con `gpt-6.1-sol`, que admite
-   *tool search*, Pi y Codex no declaran tools en la primera petición; con
-   `gpt-5.4-mini`, Pi declara 4 (`read`, `bash`, `edit`, `write`). La métrica
-   comparable es `request_bytes`.
+3. **Las tools no siempre van en el campo `tools`.** Con modelos `gpt-6.x` en
+   la API Responses, Pi y Codex envían las definiciones como un item
+   `additional_tools` dentro de `input`, y Codex además las agrupa en
+   *namespaces* (`functions`, `clock`, `collaboration`). El mock las cuenta en
+   ambos sitios desde la F2; en la F1 aparecían como 0 tools. Aun así, la
+   métrica más comparable es `request_bytes`.
 4. **`--version` no es representativo.** Claude Code tarda unos 9 ms en
    `--version` y unos 167 ms en un turno completo.
 
@@ -56,8 +58,43 @@ para diseñar los de flores.
 ## Añadir un agente
 
 1. Crear una subclase de `Adapter` en `adapters/agents.py` con `name`,
-   `binary`, `version_args` y `hello()`.
+   `binary`, `version_args`, `invoke()` (respetando `full_access`) y, si se
+   conoce su tool de shell, `shell_call()`.
 2. Registrarla en `ADAPTERS` y añadirla a `suites/perf/agents.toml` (modelo y,
    si se instala por npm, `npm` y `version`).
 3. `uv run flores-bench perf hello --quick --agents <nombre>` y comprobar que
    `info.unknown_paths` está vacío y que no hay `failures`.
+4. `uv run flores-bench harness --agents <nombre>` y revisar cada ❌: ¿es un
+   comportamiento real del agente o un fallo del adaptador?
+
+## Tool de shell de cada agente (capa B)
+
+Los escenarios escriben `{"shell": "<comando>"}` y cada adaptador lo traduce.
+Se descubrió volcando la primera petición de cada agente (`--dump-bodies`).
+
+| Agente | Tool | Argumentos | Modo sin permisos usado en la capa B |
+|---|---|---|---|
+| flores-stub | `bash` | `{"command"}` (no la ejecuta: responde con error) | — |
+| Pi | `bash` | `{"command", "timeout?"}` | no tiene permisos en `-p` |
+| Claude Code | `Bash` | `{"command", "description", "timeout?"}` | `--dangerously-skip-permissions` |
+| fx | `shell` | `{"action": "run", "command"}` | `--full-access` |
+| Codex | `functions.exec` (namespace) | tool de texto libre, sin esquema JSON | pendiente: los escenarios con tools salen como "no aplicable" |
+
+Todo corre en un workspace temporal y los comandos de los escenarios solo hacen `echo`.
+
+## Comportamientos observados en la capa B
+
+Resultados completos en [`published/README.md`](../published/README.md). Lo más instructivo:
+
+- **Nadie limita los pasos por defecto en modo headless.** En `runaway-tool-loop`
+  (el modelo pide tools para siempre) Pi, Claude Code, Codex y fx hicieron entre
+  3000 y 7000 peticiones en 45 s hasta que el runner los mató. Con un modelo real
+  eso es dinero sin techo. flores-stub para a los 8 turnos (`--max-turns`).
+- **401 no siempre falla rápido.** Pi y fx abandonan a la primera. Codex hace 6
+  intentos (≈6 s) y Claude Code sigue reintentando con backoff durante más de
+  60 s. Una clave inválida no se arregla reintentando.
+- **Pi compacta el contexto tras una respuesta de 1 MiB** (una segunda petición
+  con un prompt de "context summarization assistant"), incluso en `-p --no-session`,
+  donde la sesión termina justo después.
+- **Todos se recuperan de 429, 503 y streams cortados**, y todos devuelven al
+  modelo el error de una tool inexistente o con JSON roto en lugar de caerse.

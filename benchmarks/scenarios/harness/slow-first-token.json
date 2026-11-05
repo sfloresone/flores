@@ -1,0 +1,26 @@
+{
+  "name": "slow-first-token",
+  "title": "Primer token a los 8 s",
+  "category": "streaming",
+  "why": "Los modelos con razonamiento tardan en emitir el primer token. Un timeout demasiado agresivo aborta respuestas válidas.",
+  "prompt": "Say something.",
+  "timeout_s": 60,
+  "mock": {
+    "steps": [
+      {
+        "text": "Worth the wait.",
+        "ttft_ms": 8000
+      }
+    ]
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Worth the wait."
+    ],
+    "llm_requests": {
+      "min": 1,
+      "max": 1
+    }
+  }
+}

@@ -10,8 +10,18 @@ import urllib.request
 import pytest
 
 from flores_bench import trajectory
+from flores_bench.adapters import ADAPTERS
+from flores_bench.harness.scenarios import HARNESS_DIR, Scenario, render_mock
 from flores_bench.mock import MockProvider
-from flores_bench.paths import SCENARIOS_DIR, STUB_BIN
+from flores_bench.paths import STUB_BIN
+
+
+def stub_scenario(name: str, tmp_path) -> object:
+    """Render a layer B scenario for flores-stub into a mock scenario file."""
+    sc = Scenario.from_dict(json.loads((HARNESS_DIR / f"{name}.json").read_text()))
+    out = tmp_path / f"{name}.json"
+    out.write_text(json.dumps(render_mock(sc, ADAPTERS["flores-stub"])))
+    return out
 
 
 def run_stub(mock: MockProvider, *args: str) -> subprocess.CompletedProcess:
@@ -46,8 +56,8 @@ def test_hello_trajectory_is_valid():
         assert rec["protocol"] == "openai-chat"
 
 
-def test_tool_loop_scenario():
-    with MockProvider(scenario=SCENARIOS_DIR / "tool-roundtrip.json") as mock:
+def test_tool_loop_scenario(tmp_path):
+    with MockProvider(scenario=stub_scenario("tool-roundtrip", tmp_path)) as mock:
         res = run_stub(mock, "--prompt", "list files")
         assert res.returncode == 0, res.stderr
         events = events_of(res.stdout)
@@ -58,8 +68,8 @@ def test_tool_loop_scenario():
         assert [r["turn"] for r in mock.requests()] == [0, 1]
 
 
-def test_provider_error_is_reported():
-    with MockProvider(scenario=SCENARIOS_DIR / "rate-limited.json") as mock:
+def test_provider_error_is_reported(tmp_path):
+    with MockProvider(scenario=stub_scenario("rate-limit-recover", tmp_path)) as mock:
         res = run_stub(mock, "--prompt", "hi")
         assert res.returncode == 3
         events = events_of(res.stdout)

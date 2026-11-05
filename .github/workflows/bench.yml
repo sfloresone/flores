@@ -49,6 +49,10 @@ jobs:
         run: uv run ruff check . && uv run ruff format --check .
       - name: Python tests
         run: uv run pytest -q
+      - name: Scenario docs are up to date
+        run: uv run flores-bench scenarios --write-docs && git diff --exit-code -- docs/harness-scenarios.md
+      - name: Layer B gate (flores-stub, deterministic)
+        run: uv run flores-bench harness --agents flores-stub --enforce --out results/harness-gate.json
 
   perf:
     name: Perf (linux reference)
@@ -94,8 +98,11 @@ jobs:
       - name: perf hello
         run: uv run flores-bench perf hello --out results/hello.json
 
+      - name: Layer B matrix (all agents)
+        run: uv run flores-bench harness --out results/harness.json
+
       - name: Enforce budgets
-        run: uv run flores-bench check-budgets results/startup.json results/hello.json
+        run: uv run flores-bench check-budgets results/startup.json results/hello.json results/harness.json
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -107,7 +114,7 @@ jobs:
       - name: Publish and commit results
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          uv run flores-bench publish results/startup.json results/hello.json
+          uv run flores-bench publish results/startup.json results/hello.json results/harness.json
           git config user.name "flores-bench[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add published

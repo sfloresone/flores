@@ -1,0 +1,38 @@
+{
+  "name": "malformed-tool-args",
+  "title": "Argumentos de tool con JSON roto",
+  "category": "tools",
+  "requires": [
+    "shell"
+  ],
+  "why": "Con streaming o con modelos pequeños, los argumentos a veces llegan como JSON inválido. El agente debe reportarlo al modelo, no caerse.",
+  "prompt": "Do the task.",
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "shell_raw": "{\"command\": \"echo hi"
+          }
+        ]
+      },
+      {
+        "text": "Recovered from bad arguments."
+      }
+    ],
+    "after_last": "error"
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Recovered from bad arguments."
+    ],
+    "llm_requests": {
+      "min": 2,
+      "max": 2
+    },
+    "tool_results": {
+      "min": 1
+    }
+  }
+}

@@ -69,21 +69,46 @@ dependen de la gestión térmica y de energía y son más ruidosos.
   cuenta. Lo mismo ocurre con hyperfine y `/usr/bin/time`.
 - **`harness_ms`** = tiempo total − tiempo que tardó el mock en contestar. Como
   el mock es instantáneo, en `perf-hello` es prácticamente igual al total.
-- **"Tools" es informativo.** Con modelos que admiten *tool search*, algunos
-  harnesses (Pi y Codex con la API Responses) no declaran las tools en la
-  primera petición. La métrica comparable es **bytes enviados al modelo**.
+- **"Tools" es informativo.** Cada harness declara las tools a su manera (Pi y
+  Codex, con la API Responses, las mandan como un item `additional_tools` y
+  Codex las agrupa en *namespaces*; ver [adapters.md](adapters.md)). La métrica
+  comparable es **bytes enviados al modelo**.
 - **El modelo configurado cambia el harness.** Claude Code usa un system prompt
   distinto según el modelo. Por eso cada agente usa un ID de modelo real que
   conoce (`agents.toml`) aunque responda el mock.
 
-## Capa B: comportamiento del harness (en construcción)
+## Capa B: comportamiento del harness
 
-Mismo mock, pero con guiones (`scenarios/*.json`) que reproducen los bugs
-típicos de un harness: tool calls encadenadas, errores 429 y 5xx, respuestas
-enormes, streams cortados, llegar al límite de turnos… Cada escenario define qué
-debe pasar y se comprueba con la **trayectoria** que emite el agente
-([trajectory-schema.md](trajectory-schema.md)). Ya existen `tool-roundtrip` y
-`rate-limited`, que se usan en los tests del contrato.
+Mismo mock, con guiones (`scenarios/harness/*.json`) que reproducen los fallos
+típicos de un harness: tool calls encadenadas y en paralelo, tools inexistentes,
+argumentos con JSON roto, 429 y 5xx transitorios, 401, streams cortados a mitad,
+primer token lento, salidas de 1 MiB y bucles de tools sin fin. Lista completa y
+el porqué de cada uno: [harness-scenarios.md](harness-scenarios.md).
+
+Cómo se juzga:
+
+- **Solo desde fuera**: código de salida, stdout y lo que el mock observa
+  (peticiones, reintentos por turno, resultados de tool devueltos y el cuerpo
+  de cada petición). Así el mismo escenario juzga a flores y a cualquier
+  competidor, sin depender de su formato interno.
+- **Prueba de ejecución real**: los comandos imprimen un marcador calculado
+  (`echo flores-$((40+2))`); el escenario exige que `flores-42` llegue al modelo
+  en una petición posterior. No basta con que el agente "diga" que ejecutó.
+- **Tool calls canónicas**: el guion escribe `{"shell": "…"}` y cada adaptador
+  lo traduce a su tool (`Bash`, `bash`, `shell`). Si no se conoce la traducción,
+  el escenario es "no aplicable" (—), nunca un fallo.
+- **Fallos con estado**: el mock cuenta los intentos por turno, así que puede
+  fallar las N primeras veces (`fail_first`) o cortar el stream solo en el
+  primer intento (`truncate`) y comprobar que el agente se recupera.
+- Para agentes que emiten trayectoria (flores, flores-stub) se valida además
+  la trayectoria `trajectory/v0`.
+
+Las expectativas son **la especificación de flores**. Los competidores sirven
+de referencia de cómo lo resuelven los harnesses actuales. Es determinista
+(nivel N1, ver [test-taxonomy.md](test-taxonomy.md)), así que la puerta de
+`budgets.toml` (`[harness.<agente>]`, `must_pass` / `min_passed`) se aplica en
+cualquier plataforma y funciona como trinquete: un escenario que flores ya
+supera no puede volver a fallar.
 
 ## Capa C: tareas end-to-end (planificada)
 

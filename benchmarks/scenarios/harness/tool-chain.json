@@ -1,0 +1,57 @@
+{
+  "name": "tool-chain",
+  "title": "Tres turnos de tools encadenados",
+  "category": "tools",
+  "requires": [
+    "shell"
+  ],
+  "why": "El historial crece turno a turno. Comprueba que el agente conserva todas las salidas anteriores y no pierde ni duplica mensajes.",
+  "prompt": "Run the commands one after another.",
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "shell": "echo flores-$((100+1))"
+          }
+        ]
+      },
+      {
+        "tool_calls": [
+          {
+            "shell": "echo flores-$((100+2))"
+          }
+        ]
+      },
+      {
+        "tool_calls": [
+          {
+            "shell": "echo flores-$((100+3))"
+          }
+        ]
+      },
+      {
+        "text": "Chain complete."
+      }
+    ],
+    "after_last": "error"
+  },
+  "expect": {
+    "exit": "zero",
+    "stdout_contains": [
+      "Chain complete."
+    ],
+    "llm_requests": {
+      "min": 4,
+      "max": 4
+    },
+    "tool_results": {
+      "min": 3
+    },
+    "request_contains": [
+      "flores-101",
+      "flores-102",
+      "flores-103"
+    ]
+  }
+}

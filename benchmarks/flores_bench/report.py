@@ -23,7 +23,10 @@ REFERENCE_PLATFORM = "linux-x86_64"
 SUITE_TITLES = {
     "perf-startup": "Arranque (`<agent> --version`)",
     "perf-hello": 'Overhead del harness: un "hello world" contra el mock provider',
+    "harness": "Comportamiento del harness (capa B): fallos guionizados",
 }
+
+STATUS_ICON = {"pass": "✅", "fail": "❌", "n/a": "—", "error": "⚠️"}
 
 # (metric, column title, unit transform)
 COLUMNS = {
@@ -56,6 +59,20 @@ def compact(result: dict) -> dict:
 
 def history_line(result: dict) -> dict:
     subjects = {}
+    if result["suite"] == "harness":
+        for s in result["subjects"]:
+            if s.get("scenarios"):
+                subjects[s["name"]] = {
+                    "version": s.get("version"),
+                    **s["metrics"],
+                    "status": {k: v["status"] for k, v in s["scenarios"].items()},
+                }
+        return {
+            "created_at": result["created_at"],
+            "sha": result["git"]["sha"],
+            "dirty": result["git"]["dirty"],
+            "subjects": subjects,
+        }
     for s in result["subjects"]:
         if not s.get("metrics"):
             continue
@@ -149,14 +166,72 @@ def render_chart(result: dict, metric: str = "wall_ms", title: str = "Tiempo p50
     )
 
 
+def _commit(result: dict) -> str:
+    git = result["git"]
+    return f"Commit `{git.get('short') or 'sin commit'}`" + (" (dirty)" if git.get("dirty") else "")
+
+
+def render_harness(result: dict) -> str:
+    """Scenario × agent matrix plus the reasons behind every failure."""
+    subs = [s for s in result["subjects"] if s.get("scenarios")]
+    skipped = [s for s in result["subjects"] if not s.get("scenarios")]
+    head = "| Escenario | " + " | ".join(f"{s['label']}<br><sub>{s.get('version') or ''}</sub>" for s in subs) + " |"
+    rows = [head, "|---|" + ":---:|" * len(subs)]
+    for sc in result["scenarios"]:
+        cells = [STATUS_ICON.get(s["scenarios"].get(sc["name"], {}).get("status"), "?") for s in subs]
+        rows.append(
+            f"| **{sc['title']}**<br><sub>`{sc['name']}` · {sc['category']}</sub> | " + " | ".join(cells) + " |"
+        )
+    totals = [f"**{s['metrics']['passed']}/{s['metrics']['applicable']}**" for s in subs]
+    rows.append("| Superados / aplicables | " + " | ".join(totals) + " |")
+    out = [
+        "\n".join(rows),
+        "",
+        "✅ cumple la especificación · ❌ no la cumple · — no aplicable al agente · ⚠️ error del runner",
+    ]
+    if skipped:
+        out += ["", "No medidos: " + "; ".join(f"**{s['label']}** ({s.get('skipped_reason')})" for s in skipped)]
+
+    details = []
+    for s in subs:
+        for name, r in s["scenarios"].items():
+            if r["status"] in ("fail", "error"):
+                obs = (r.get("runs") or [{}])[-1].get("observed", {})
+                failed = [c for c in (r.get("runs") or [{}])[-1].get("checks", []) if not c["ok"]]
+                why = "; ".join(f"{c['name']}: esperado {c['expected']}, observado {c['observed']}" for c in failed)
+                why = why or r.get("reason", "")
+                details.append(
+                    f"- **{s['label']}** · `{name}`: {why} "
+                    f"<sub>(exit {obs.get('exit_code')}, {obs.get('llm_requests')} peticiones, "
+                    f"{round(obs.get('wall_ms', 0))} ms)</sub>"
+                )
+    if details:
+        out += ["", "<details><summary>Por qué falla cada caso</summary>", "", *details, "", "</details>"]
+    return "\n".join(out)
+
+
 def render_result(result: dict) -> str:
     m = result["machine"]
+    if result["suite"] == "harness":
+        return "\n".join(
+            [
+                f"### `{m['platform']}`",
+                "",
+                f"{_commit(result)} · {result['created_at']} · "
+                f"{result['params'].get('runs_per_scenario')} ejecución(es) por escenario",
+                "",
+                "Escenarios y su porqué: [`../docs/harness-scenarios.md`](../docs/harness-scenarios.md).",
+                "",
+                render_harness(result),
+                "",
+            ]
+        )
     p = result["params"]
     ref = " (referencia)" if m["platform"] == REFERENCE_PLATFORM else ""
     lines = [
         f"### `{m['platform']}`{ref}",
         "",
-        f"Commit `{result['git'].get('short') or 'sin commit'}`{' (dirty)' if result['git'].get('dirty') else ''} · "
+        f"{_commit(result)} · "
         f"{result['created_at']} · {m.get('cpu')} · {m.get('cores')} cores · "
         f"{'CI' if m.get('ci') else 'local'} · "
         f"{p.get('rounds')}×{p.get('runs_per_round')} runs (+{p.get('warmup')} warmup)",

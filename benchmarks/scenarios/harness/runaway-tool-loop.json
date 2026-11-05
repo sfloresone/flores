@@ -1,0 +1,28 @@
+{
+  "name": "runaway-tool-loop",
+  "title": "El modelo pide tools sin fin",
+  "category": "limits",
+  "why": "Un modelo atascado puede pedir tools para siempre. El agente necesita un límite propio de pasos y debe parar solo (con un error claro) antes de quemar tokens.",
+  "prompt": "Do the task.",
+  "timeout_s": 45,
+  "mock": {
+    "steps": [
+      {
+        "tool_calls": [
+          {
+            "name": "flores_does_not_exist",
+            "arguments": {}
+          }
+        ]
+      }
+    ],
+    "after_last": "repeat_last"
+  },
+  "expect": {
+    "exit": "any",
+    "completes": true,
+    "llm_requests": {
+      "max": 50
+    }
+  }
+}

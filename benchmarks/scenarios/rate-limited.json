@@ -1,7 +1,0 @@
-{
-  "name": "rate-limited",
-  "description": "The provider answers 429 to every request. The agent must report a retryable provider error and stop cleanly.",
-  "steps": [
-    { "error": { "status": 429, "type": "rate_limit_error", "message": "Rate limit exceeded (mock)" } }
-  ]
-}

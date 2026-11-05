@@ -17,3 +17,10 @@
 "wall_ms.p50" = 50.0
 "rss_mb.p50" = 30.0
 "request_bytes.p50" = 4096
+
+# Layer B (harness behaviour). Deterministic, so enforced on every platform.
+# Ratchet: when flores starts passing a scenario, add it to must_pass so it
+# can never silently regress. flores-stub has no tools and no retries: it is
+# the "red" starting point of the behaviour TDD.
+[harness.flores-stub]
+must_pass = ["basic-text", "unknown-tool", "auth-error-fail-fast", "runaway-tool-loop"]

@@ -27,6 +27,8 @@ type RequestInfo struct {
 	Messages     int      `json:"messages"`
 	Tools        int      `json:"tools"`
 	ToolsBytes   int      `json:"tools_bytes"`
+	// ToolResults counts tool outputs the harness sends back to the model.
+	ToolResults int `json:"tool_results"`
 	// Turn is the number of assistant turns already present in the request.
 	Turn int `json:"turn"`
 }
@@ -62,6 +64,9 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 			if m.Role == "system" || m.Role == "developer" {
 				info.SystemBytes += contentBytes(m.Content)
 			}
+			if m.Role == "tool" {
+				info.ToolResults++
+			}
 			flags[i] = m.Role == "assistant"
 		}
 		info.Turn = countRuns(flags)
@@ -74,6 +79,16 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 		flags := make([]bool, len(msgs))
 		for i, m := range msgs {
 			flags[i] = m.Role == "assistant"
+			var blocks []struct {
+				Type string `json:"type"`
+			}
+			if m.Role == "user" && json.Unmarshal(m.Content, &blocks) == nil {
+				for _, b := range blocks {
+					if b.Type == "tool_result" {
+						info.ToolResults++
+					}
+				}
+			}
 		}
 		info.Turn = countRuns(flags)
 
@@ -88,6 +103,7 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 			Type    string          `json:"type"`
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
+			Tools   json.RawMessage `json:"tools"`
 		}
 		_ = json.Unmarshal(req["input"], &items)
 		info.Messages = len(items)
@@ -95,6 +111,16 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 		for i, it := range items {
 			if it.Role == "system" || it.Role == "developer" {
 				info.SystemBytes += contentBytes(it.Content)
+			}
+			// Newer Responses models receive tool definitions as an input item
+			// ("additional_tools", possibly grouped in namespaces) instead of the
+			// top-level "tools" field. Pi and Codex do this with gpt-6.x.
+			if it.Type == "additional_tools" {
+				info.Tools += countTools(it.Tools)
+				info.ToolsBytes += len(it.Tools)
+			}
+			if strings.HasSuffix(it.Type, "_call_output") {
+				info.ToolResults++
 			}
 			switch {
 			case it.Role == "assistant":
@@ -107,6 +133,26 @@ func inspect(proto Protocol, body []byte) (RequestInfo, error) {
 		info.Turn = countRuns(flags)
 	}
 	return info, nil
+}
+
+// countTools counts tool definitions, descending into namespaces.
+func countTools(raw json.RawMessage) int {
+	var tools []struct {
+		Type  string          `json:"type"`
+		Tools json.RawMessage `json:"tools"`
+	}
+	if json.Unmarshal(raw, &tools) != nil {
+		return 0
+	}
+	n := 0
+	for _, t := range tools {
+		if t.Type == "namespace" {
+			n += countTools(t.Tools)
+		} else {
+			n++
+		}
+	}
+	return n
 }
 
 type message struct {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Scenario is a deterministic script of model responses. The mock picks the
@@ -30,15 +31,59 @@ type Latency struct {
 }
 
 type Step struct {
-	Text      string     `json:"text,omitempty"`
+	Text string `json:"text,omitempty"`
+	// Repeat multiplies Text, to produce huge outputs without huge files.
+	Repeat    int        `json:"repeat,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-	Error     *StepError `json:"error,omitempty"`
-	Usage     *Usage     `json:"usage,omitempty"`
+	// Error answers every attempt of this step with an HTTP error.
+	Error *StepError `json:"error,omitempty"`
+	// FailFirst answers the first Times attempts with an error, then succeeds:
+	// the agent is expected to retry.
+	FailFirst *FailFirst `json:"fail_first,omitempty"`
+	// Truncate cuts the connection after AfterChunks text chunks on the first
+	// Times attempts (0 = every attempt), simulating a dropped stream.
+	Truncate *Truncate `json:"truncate,omitempty"`
+	// TTFTMs overrides the scenario latency for this step.
+	TTFTMs *int   `json:"ttft_ms,omitempty"`
+	Usage  *Usage `json:"usage,omitempty"`
+}
+
+type FailFirst struct {
+	Times       int    `json:"times"`
+	Status      int    `json:"status"`
+	Type        string `json:"type,omitempty"`
+	Message     string `json:"message,omitempty"`
+	RetryAfterS int    `json:"retry_after_s,omitempty"`
+}
+
+type Truncate struct {
+	AfterChunks int `json:"after_chunks"`
+	Times       int `json:"times,omitempty"`
 }
 
 type ToolCall struct {
 	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+	// RawArguments is sent verbatim instead of Arguments. Use it to send
+	// malformed JSON and check the agent survives it.
+	RawArguments string `json:"raw_arguments,omitempty"`
+}
+
+// args is the argument string as it goes on the wire.
+func (tc ToolCall) args() string {
+	if tc.RawArguments != "" {
+		return tc.RawArguments
+	}
+	return string(tc.Arguments)
+}
+
+// argsObject is a valid JSON value for protocols that embed arguments as an
+// object (Anthropic non-streaming); malformed raw arguments degrade to {}.
+func (tc ToolCall) argsObject() json.RawMessage {
+	if json.Valid([]byte(tc.args())) {
+		return json.RawMessage(tc.args())
+	}
+	return json.RawMessage("{}")
 }
 
 type StepError struct {
@@ -113,13 +158,25 @@ func (s *Scenario) validate() error {
 		if st.Error != nil && st.Error.Status < 400 {
 			return fmt.Errorf("step %d: error.status must be >= 400", i)
 		}
+		if f := st.FailFirst; f != nil && (f.Times < 1 || f.Status < 400) {
+			return fmt.Errorf("step %d: fail_first needs times >= 1 and status >= 400", i)
+		}
+		if t := st.Truncate; t != nil && (t.AfterChunks < 0 || t.Times < 0) {
+			return fmt.Errorf("step %d: truncate values must be >= 0", i)
+		}
+		if st.Repeat > 1 {
+			s.Steps[i].Text = strings.Repeat(st.Text, st.Repeat)
+			s.Steps[i].Repeat = 0
+		}
 		for j, tc := range st.ToolCalls {
 			if tc.Name == "" {
 				return fmt.Errorf("step %d tool_call %d: name is required", i, j)
 			}
-			if len(tc.Arguments) == 0 {
+			switch {
+			case tc.RawArguments != "":
+			case len(tc.Arguments) == 0:
 				s.Steps[i].ToolCalls[j].Arguments = json.RawMessage("{}")
-			} else if !json.Valid(tc.Arguments) {
+			case !json.Valid(tc.Arguments):
 				return fmt.Errorf("step %d tool_call %d: arguments must be JSON", i, j)
 			}
 		}

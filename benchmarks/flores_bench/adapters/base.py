@@ -1,9 +1,9 @@
 """Adapter interface: how to start, version and drive one coding-agent harness.
 
 An adapter knows nothing about measuring. It only answers "what command, with
-what environment and config files, makes this agent do X against provider Y".
-Runners (perf/startup.py, perf/hello.py, later tasks/) do the measuring, so
-every agent is timed by exactly the same code.
+what environment and config files, makes this agent run prompt X against
+provider Y". Runners (perf/, harness/, later tasks/) do the measuring, so every
+agent is timed and judged by exactly the same code.
 """
 
 from __future__ import annotations
@@ -40,21 +40,29 @@ NESTING_ENV = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CODEX_T
 
 
 @dataclass
-class HelloContext:
-    """Inputs for a single scripted run against the mock provider."""
+class RunContext:
+    """Inputs for a single run against the mock provider."""
 
     mock_url: str  # e.g. http://127.0.0.1:53000 (no /v1)
     config_dir: Path  # fresh, empty, private config dir for this run
     workspace: Path  # fresh, empty working directory
     prompt: str
     model: str
+    # Let the agent run tools without asking (harness scenarios run shell
+    # commands in a throwaway workspace).
+    full_access: bool = False
+    # Ask the agent for trajectory/v0 JSONL on stdout (only contract agents).
+    trajectory: bool = False
+
+
+# Kept for readability in the perf suite.
+HelloContext = RunContext
 
 
 @dataclass
 class Invocation:
     argv: list[str]
     env: dict[str, str] = field(default_factory=dict)  # added on top of the sanitized environment
-    stdin_devnull: bool = True
 
 
 class Unsupported(Exception):
@@ -67,6 +75,8 @@ class Adapter:
     binary: str = ""
     version_args: tuple[str, ...] = ("--version",)
     homepage: str = ""
+    # Emits trajectory/v0 when RunContext.trajectory is set.
+    supports_trajectory: bool = False
 
     def path(self) -> str | None:
         return shutil.which(self.binary)
@@ -98,5 +108,10 @@ class Adapter:
             raise Unsupported(f"{self.binary} not installed")
         return [exe, *self.version_args]
 
-    def hello(self, ctx: HelloContext) -> Invocation:
-        raise Unsupported(f"{self.name}: hello workload not implemented")
+    def invoke(self, ctx: RunContext) -> Invocation:
+        """Run ctx.prompt non-interactively against ctx.mock_url."""
+        raise Unsupported(f"{self.name}: non-interactive runs not implemented")
+
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        """Name and arguments of a tool call that runs `command` in this agent's shell tool."""
+        raise Unsupported(f"{self.name}: shell tool mapping unknown")
