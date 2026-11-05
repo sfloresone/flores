@@ -51,7 +51,7 @@ class RunContext:
     # Let the agent run tools without asking (harness scenarios run shell
     # commands in a throwaway workspace).
     full_access: bool = False
-    # Ask the agent for trajectory/v0 JSONL on stdout (only contract agents).
+    # Ask the agent for trajectory/v1 JSONL on stdout (only contract agents).
     trajectory: bool = False
 
 

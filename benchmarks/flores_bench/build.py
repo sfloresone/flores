@@ -1,16 +1,21 @@
-"""Build the Go helper binaries (mock provider, flores-stub, meter)."""
+"""Build the Go binaries: the bench helpers and the flores agent itself."""
 
 from __future__ import annotations
 
 import subprocess
 
-from flores_bench.paths import BENCH_ROOT, BIN_DIR, MEASURE_BIN, METER_BIN, MOCK_BIN, STUB_BIN
+from flores_bench.paths import BENCH_ROOT, BIN_DIR, CLI_ROOT, FLORES_BIN, MEASURE_BIN, METER_BIN, MOCK_BIN, STUB_BIN
 
 TOOLS = {
     MOCK_BIN: "./tools/mockprovider",
     STUB_BIN: "./tools/flores-stub",
     METER_BIN: "./tools/meter",
     MEASURE_BIN: "./tools/measure",
+}
+
+# Binaries from other Go modules: output -> (module root, package).
+MODULES = {
+    FLORES_BIN: (CLI_ROOT, "./cmd/flores"),
 }
 
 
@@ -23,3 +28,5 @@ def build_tools() -> None:
     BIN_DIR.mkdir(parents=True, exist_ok=True)
     for out, pkg in TOOLS.items():
         subprocess.run(["go", "build", "-trimpath", "-o", str(out), pkg], cwd=BENCH_ROOT, check=True)
+    for out, (root, pkg) in MODULES.items():
+        subprocess.run(["go", "build", "-trimpath", "-o", str(out), pkg], cwd=root, check=True)
