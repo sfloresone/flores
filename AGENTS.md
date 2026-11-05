@@ -19,6 +19,7 @@ Short rules for anyone (human or agent) working in this repo. Depth lives in
 - **`benchmarks/` owns measurement.** The web reads `benchmarks/published/**` as data; it never rewrites those files or recalculates stats.
 - **Do not paste benchmark numbers into MDX.** Charts and tables import JSON (or a thin projection of it) so a new publish updates the site without rewriting prose.
 - **`benchmarks/docs/`** is engineering reference for the bench. The public educational guide lives as MDX under `apps/web` when written.
+- **No build outputs or large files in git.** Compiled helpers go to `benchmarks/.bin/` (ignored). Stage paths explicitly, never a whole folder. CI rejects a PR if *any* of its commits adds a native binary or a blob over 1 MiB (`.github/scripts/check-new-blobs.sh`): a file added and removed later in the same PR still reaches `main`'s history.
 - **Do not create `apps/cli` stubs “for later”** until the Go agent work starts. No folders for later.
 
 ## Web stack (starting point)
