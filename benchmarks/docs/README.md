@@ -1,5 +1,7 @@
 # Documentación de `benchmarks/`
 
+> 🇬🇧 [English](en/README.md)
+
 Aquí hay tres tipos de documento. Conviene no mezclarlos.
 
 | Tipo | Para quién | Dónde vive | Estado |

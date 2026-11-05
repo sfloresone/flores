@@ -81,7 +81,7 @@ jobs:
         run: uv run --group tasks flores-bench tasks validate --concurrent 4
 
   campaign:
-    name: Campaign (${{ inputs.tier }}, k=${{ inputs.k }}, ${{ inputs.upstream }})
+    name: Campaign (manual, real models)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: real-models

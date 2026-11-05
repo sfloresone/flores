@@ -1,5 +1,7 @@
 # flores-bench
 
+> 🇬🇧 [English](README.en.md)
+
 Suite de benchmarks de **flores**. La construimos *antes* que el agente para que
 cada mejora se demuestre con datos y no con opiniones: es una especie de TDD de
 rendimiento. Primero fijamos qué medimos y cómo; después el agente tiene que
