@@ -1,13 +1,22 @@
-"""Run one agent process and measure it (wall, CPU, peak RSS, exit, output)."""
+"""Run one agent process and measure it (wall, CPU, peak RSS, exit, output).
+
+The agent is launched by `tools/measure` (Go), not directly from Python. On
+Linux a child's peak RSS includes the RSS of the process that exec'd it, so a
+direct launch from this Python process put a ~24 MiB floor under every agent.
+`measure` keeps that floor at ~3 MiB and reports it (`rss_floor_mb`), so a
+value that cannot be told apart from the floor is shown as "≤ floor".
+See docs/metrics.md (RSS).
+"""
 
 from __future__ import annotations
 
-import os
+import json
 import subprocess
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from flores_bench.paths import MEASURE_BIN
 
 
 @dataclass
@@ -17,45 +26,37 @@ class ProcResult:
     wall_ms: float
     cpu_ms: float
     rss_mb: float
+    rss_floor_mb: float  # peak RSS the launcher passes on at exec (0 on macOS)
     stdout: str
     stderr: str
 
 
-def _rss_bytes(ru_maxrss: int) -> int:
-    # Linux reports KiB, macOS reports bytes.
-    return ru_maxrss if os.uname().sysname == "Darwin" else ru_maxrss * 1024
-
-
 def run_measured(argv: list[str], env: dict[str, str], cwd: Path, timeout_s: float) -> ProcResult:
-    """Run to completion (or kill at timeout) and collect rusage via os.wait4.
+    """Run to completion (or kill at timeout) under tools/measure.
 
     Output goes to temp files, not pipes, so a chatty agent can never block on
     a full pipe buffer and distort the timing.
     """
+    if not MEASURE_BIN.exists():
+        raise FileNotFoundError(f"{MEASURE_BIN} not found; run `flores-bench build` first")
     with tempfile.TemporaryDirectory(prefix="flores-proc-") as tmp:
         out_path, err_path = Path(tmp, "stdout"), Path(tmp, "stderr")
-        timed_out = False
-        with open(out_path, "w") as out, open(err_path, "w") as err:
-            t0 = time.perf_counter()
-            proc = subprocess.Popen(argv, cwd=cwd, env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
-            deadline = t0 + timeout_s
-            while True:
-                pid, status, ru = os.wait4(proc.pid, os.WNOHANG)
-                if pid:
-                    break
-                if time.perf_counter() > deadline:
-                    timed_out = True
-                    proc.kill()
-                    pid, status, ru = os.wait4(proc.pid, 0)
-                    break
-                time.sleep(0.0005)
-            wall = time.perf_counter() - t0
+        cmd = [str(MEASURE_BIN), "-timeout", f"{timeout_s}s", "-dir", str(cwd)]
+        cmd += ["-stdout", str(out_path), "-stderr", str(err_path), "--", *argv]
+        done = subprocess.run(cmd, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False)
+        try:
+            r = json.loads(done.stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"measure failed ({done.returncode}): {done.stderr.strip()}") from e
+        if r.get("error"):
+            raise RuntimeError(f"measure could not run {argv[0]}: {r['error']}")
         return ProcResult(
-            exit_code=os.waitstatus_to_exitcode(status),
-            timed_out=timed_out,
-            wall_ms=wall * 1000,
-            cpu_ms=(ru.ru_utime + ru.ru_stime) * 1000,
-            rss_mb=_rss_bytes(ru.ru_maxrss) / 2**20,
+            exit_code=r["exit_code"],
+            timed_out=r["timed_out"],
+            wall_ms=r["wall_ms"],
+            cpu_ms=r["cpu_ms"],
+            rss_mb=r["rss_kib"] / 1024,
+            rss_floor_mb=r["rss_floor_kib"] / 1024,
             stdout=out_path.read_text(errors="replace"),
             stderr=err_path.read_text(errors="replace"),
         )

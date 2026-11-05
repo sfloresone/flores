@@ -74,6 +74,7 @@ benchmarks/
 ├── tools/                 # helpers en Go (mismo lenguaje que flores)
 │   ├── mockprovider/      # proveedor LLM falso: OpenAI Chat, OpenAI Responses, Anthropic Messages
 │   ├── flores-stub/       # agente mínimo que cumple el contrato headless
+│   ├── measure/           # lanza un proceso y mide tiempo, CPU y pico de RSS (sin heredar la memoria del padre)
 │   └── meter/             # proxy medidor: claves fuera de los agentes, tokens, coste y tope de gasto
 ├── schema/                # trajectory.v0.schema.json: el contrato de salida del agente
 ├── scenarios/harness/     # capa B: guion del mock + expectativas de cada escenario

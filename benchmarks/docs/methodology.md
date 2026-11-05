@@ -64,9 +64,11 @@ dependen de la gestión térmica y de energía y son más ruidosos.
   que no carga el runtime completo. Claude Code tarda unos 9 ms en `--version`
   y unos 167 ms en hacer un turno. La cifra que representa la experiencia real
   es la de `perf-hello`.
-- **El RSS es el del proceso lanzado.** `os.wait4` devuelve el pico de RSS del
-  hijo directo; si el agente lanza subprocesos y no los espera, su memoria no
-  cuenta. Lo mismo ocurre con hyperfine y `/usr/bin/time`.
+- **El RSS es el del proceso lanzado.** `tools/measure` devuelve el pico de RSS
+  del hijo directo; si el agente lanza subprocesos y no los espera, su memoria no
+  cuenta. En Linux hay un suelo de unos 2,5 MiB (el propio lanzador): un valor
+  pegado a él se publica como "≤ suelo". Detalles en
+  [metrics.md](metrics.md#rss-y-el-suelo-del-lanzador).
 - **`harness_ms`** = tiempo total − tiempo que tardó el mock en contestar. Como
   el mock es instantáneo, en `perf-hello` es prácticamente igual al total.
 - **"Tools" es informativo.** Cada harness declara las tools a su manera (Pi y

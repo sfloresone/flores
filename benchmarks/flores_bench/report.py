@@ -123,10 +123,17 @@ def publish(result: dict, root: Path = PUBLISHED_DIR) -> Path:
 # ------------------------------------------------------------------ markdown
 
 
-def _fmt(metric: str, stats: dict | None) -> str:
+# A peak RSS within this margin of the launcher's floor cannot be told apart
+# from it (Linux only; see docs/metrics.md), so it is shown as "≤ floor".
+RSS_FLOOR_MARGIN_MB = 0.1
+
+
+def _fmt(metric: str, stats: dict | None, floor: dict | None = None) -> str:
     if not stats:
         return "—"
     v = stats["p50"]
+    if metric == "rss_mb" and floor and floor["p50"] and v <= floor["p50"] + RSS_FLOOR_MARGIN_MB:
+        return f"≤ {floor['p50']:.1f}"
     if metric in KIB_METRICS:
         return f"{v / 1024:.1f}"
     if metric in ("tools", "llm_requests"):
@@ -158,7 +165,7 @@ def render_table(result: dict) -> str:
         wall = s["metrics"].get("wall_ms")
         cells = []
         for metric, _ in cols:
-            cell = _fmt(metric, s["metrics"].get(metric))
+            cell = _fmt(metric, s["metrics"].get(metric), s["metrics"].get("rss_floor_mb"))
             if metric == "wall_ms" and wall and wall.get("ci95_p50"):
                 lo, hi = wall["ci95_p50"]
                 cell += f" <sub>[{lo:.1f}–{hi:.1f}]</sub>"

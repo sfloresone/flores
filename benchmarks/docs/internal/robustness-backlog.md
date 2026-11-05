@@ -47,13 +47,13 @@ Prioridad: 🔴 puede dar resultados engañosos · 🟡 mejora · 🟢 menor.
 
 ## Ruido de medición
 
-- 🔴 **RSS de `perf-hello` en Linux tiene un suelo de unos 24 MiB.** En la primera
-  ejecución de CI (PR #1), flores-stub y fx dieron exactamente 23,98 MiB, frente
-  a 11,6 y 4,9 MiB en macOS. Hipótesis sin comprobar: `wait4` en Linux cuenta
-  las páginas del proceso Python padre que hereda el hijo al hacer fork.
-  `perf-startup` (hyperfine) no lo sufre: stub 6,5 MiB, fx 3,3 MiB. Propuesta:
-  lanzar el agente desde un pequeño medidor en Go (`tools/measure`) o con
-  `posix_spawn`, y comprobarlo con un binario de RSS conocido.
+- ✅ ~~**RSS de `perf-hello` en Linux tiene un suelo de unos 24 MiB.**~~ Confirmado:
+  al hacer `exec`, Linux guarda en el hijo el pico de RSS del espacio de memoria
+  anterior (el del padre Python, o el de hyperfine en `perf-startup`).
+  Comprobado con `/bin/true` y un padre con 100 MiB de lastre: medía 114 MiB.
+  Resuelto con `tools/measure`, que publica su propio suelo (unos 2,5 MiB) y
+  marca los valores pegados a él como "≤ suelo". Ver
+  [metrics.md](../metrics.md#rss-y-el-suelo-del-lanzador).
 
 - 🟡 Guardar en el resultado lo que afecta al ruido (modo de energía de la CPU,
   carga inicial de la máquina).
