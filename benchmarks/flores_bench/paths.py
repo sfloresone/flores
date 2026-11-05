@@ -15,3 +15,4 @@ SCHEMA_DIR = BENCH_ROOT / "schema"
 
 MOCK_BIN = BIN_DIR / "mockprovider"
 STUB_BIN = BIN_DIR / "flores-stub"
+METER_BIN = BIN_DIR / "meter"

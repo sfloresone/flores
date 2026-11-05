@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/hanging-test"
+
+[metadata]
+category = "debug"
+difficulty = "medium"
+why = "El test se cuelga para siempre: el harness tiene que cortar comandos con timeout y seguir trabajando."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

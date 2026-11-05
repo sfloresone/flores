@@ -26,6 +26,7 @@ Para consultar cuando lo necesites:
 
 - [Métricas](metrics.md): qué significa cada número.
 - [Escenarios de la capa B](harness-scenarios.md): cada fallo que simulamos (generado).
+- [Tareas flores-micro](flores-micro.md): las tareas de la capa C (generado).
 - [Contrato headless y trayectorias](trajectory-schema.md): lo que `flores run` debe emitir.
 - [Formato de resultados](results-format.md): cómo se guardan y publican.
 - [Adaptadores](adapters.md): cómo se conecta cada agente al mock.

@@ -9,6 +9,8 @@
 |---|---|---|
 | `tools/mockprovider/` (Go) | Imita a los proveedores, contesta según el escenario y apunta lo que recibe | Ejecutar agentes, calcular estadística o publicar informes |
 | `tools/flores-stub/` (Go) | Agente mínimo que cumple el contrato. Sirve para probar y calibrar el circuito | Hacerse pasar por el agente real |
+| `tools/meter/` (Go) | Proxy entre los agentes y los proveedores reales: guarda las claves, mide tokens y coste, corta el gasto | Escuchar en una interfaz pública o reenviar peticiones de modelos sin precio |
+| Harbor (dependencia fijada) | Construir la imagen de cada tarea, instalar el agente, ejecutar el verificador | Ver claves reales (el runner se las quita del entorno) |
 | `flores_bench/` (Python) | Lanza los agentes, aísla el entorno, repite, mide y genera los informes | Reimplementar el mock o tener reglas del workflow de GitHub |
 | `scenarios/`, `suites/`, `schema/` | Datos: guiones, versiones, límites y contratos. Los leen Go y Python | Esconder lógica de ejecución |
 | `.github/workflows/bench.yml` | Decide cuándo se prueba, se mide y se publica | Calcular estadística o definir la metodología |
@@ -54,7 +56,7 @@ Hay cuatro situaciones. Cada una responde a una pregunta distinta.
 - El 2 y el 3 están **fusionados** en un solo job (`perf`): en cada PR corre la
   pasada completa con todos los agentes, no una corta con el stub. Separarlos
   y añadir `schedule` está pendiente ([notas internas](internal/robustness-backlog.md)).
-- Falta el 4: la capa C no existe todavía.
+- El 4 está en `.github/workflows/tasks.yml`: valida las tareas (oracle/nop, N1) cuando cambian, y ejecuta campañas con modelos reales solo a mano (`workflow_dispatch`), con presupuesto obligatorio y los secretos únicamente en ese job.
 - Los avisos y los fallos de la capa B (comportamiento) se aplican en cualquier
   plataforma; los de tiempo, solo en Linux.
 

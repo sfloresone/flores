@@ -13,6 +13,7 @@ export default defineConfig({
         "astro:config:setup": ({ command, injectRoute }) => {
           if (command === "dev") {
             injectRoute({ pattern: "/dev", entrypoint: "./src/dev/catalog.astro" });
+            injectRoute({ pattern: "/dev/tipografia", entrypoint: "./src/dev/typography.astro" });
           }
         },
       },

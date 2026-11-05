@@ -24,6 +24,7 @@ SUITE_TITLES = {
     "perf-startup": "Arranque (`<agent> --version`)",
     "perf-hello": 'Overhead del harness: un "hello world" contra el mock provider',
     "harness": "Comportamiento del harness (capa B): fallos guionizados",
+    "tasks": "Tareas reales (capa C): flores-micro con modelos reales",
 }
 
 STATUS_ICON = {"pass": "✅", "fail": "❌", "n/a": "—", "error": "⚠️"}
@@ -59,6 +60,26 @@ def compact(result: dict) -> dict:
 
 def history_line(result: dict) -> dict:
     subjects = {}
+    if result["suite"] == "tasks":
+        for s in result["subjects"]:
+            if s.get("metrics"):
+                m = s["metrics"]
+                subjects[s["name"]] = {
+                    "version": s.get("version"),
+                    "pass_at_1": m["pass_at_1"],
+                    "pass_hat_k": m["pass_hat_k"],
+                    "cost_usd": m["cost_usd"],
+                    "passed": {t: e["passed"] for t, e in s["tasks"].items()},
+                }
+        return {
+            "created_at": result["created_at"],
+            "sha": result["git"]["sha"],
+            "dirty": result["git"]["dirty"],
+            "tier": result["params"].get("tier"),
+            "k": result["params"].get("k"),
+            "upstream": result["params"].get("upstream"),
+            "subjects": subjects,
+        }
     if result["suite"] == "harness":
         for s in result["subjects"]:
             if s.get("scenarios"):
@@ -210,8 +231,69 @@ def render_harness(result: dict) -> str:
     return "\n".join(out)
 
 
+def _usd(x: float) -> str:
+    return f"${x:.4f}" if x < 1 else f"${x:.2f}"
+
+
+def render_tasks(result: dict) -> str:
+    """Summary per agent·model, then the task × subject matrix (passes out of k)."""
+    k = result["params"].get("k")
+    subs = [s for s in result["subjects"] if s.get("metrics")]
+    skipped = [s for s in result["subjects"] if not s.get("metrics")]
+    rows = [
+        f"| Agente · modelo | Versión | pass@1 | pass^{k} | Coste total | Coste / ejecución "
+        "| Tokens entrada / salida | Peticiones / ejecución | Tiempo del agente p50 (s) |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for s in sorted(subs, key=lambda s: -s["metrics"]["pass_at_1"]):
+        m = s["metrics"]
+        tok = m["tokens"]
+        tin = tok["input"] + tok["cache_read"] + tok["cache_write"]
+        per = m["requests"] / m["trials"] if m["trials"] else 0
+        warn = " ⚠" if m["estimated_cost_requests"] or m["unattributed_requests"] or m["errors"] else ""
+        rows.append(
+            f"| {s['label']}{warn} | {s.get('version') or ''} | {m['pass_at_1']:.0%} | {m['pass_hat_k']:.0%} | "
+            f"{_usd(m['cost_usd'])} | {_usd(m['cost_per_trial_usd'])} | {tin:,} / {tok['output']:,} | "
+            f"{per:.1f} | {m['agent_s_p50'] if m['agent_s_p50'] is not None else '-'} |"
+        )
+    out = ["\n".join(rows)]
+    if subs:
+        head = "| Tarea | " + " | ".join(s["label"] for s in subs) + " |"
+        matrix = [head, "|---|" + ":---:|" * len(subs)]
+        for t in result.get("tasks", []):
+            cells = []
+            for s in subs:
+                e = s["tasks"].get(t["name"])
+                cells.append(f"{e['passed']}/{len(e['rewards'])}" if e else "-")
+            matrix.append(f"| `{t['name']}` <sub>{t['category']}</sub> | " + " | ".join(cells) + " |")
+        out += ["", "\n".join(matrix)]
+    out += [
+        "",
+        f"pass@1 = media de aciertos sobre las {k} ejecuciones de cada tarea · "
+        f"pass^{k} = tareas resueltas en las {k} ejecuciones (fiabilidad) · "
+        "coste medido por el proxy `meter` con `suites/tasks/pricing.json` · "
+        "un ⚠ junto al agente indica errores, costes estimados o peticiones sin atribuir (detalle en el JSON).",
+    ]
+    if skipped:
+        out += ["", "No medidos: " + "; ".join(f"**{s['label']}** ({s.get('skipped_reason')})" for s in skipped)]
+    return "\n".join(out)
+
+
 def render_result(result: dict) -> str:
     m = result["machine"]
+    if result["suite"] == "tasks":
+        p = result["params"]
+        return "\n".join(
+            [
+                f"### `{m['platform']}` · modelos {p.get('tier')} · upstream {p.get('upstream')}",
+                "",
+                f"{_commit(result)} · {result['created_at']} · k={p.get('k')} · Harbor {p.get('harbor') or '?'} · "
+                f"gasto {_usd(result.get('spent_usd', 0))} de {_usd(p.get('budget_usd', 0))}",
+                "",
+                render_tasks(result),
+                "",
+            ]
+        )
     if result["suite"] == "harness":
         return "\n".join(
             [

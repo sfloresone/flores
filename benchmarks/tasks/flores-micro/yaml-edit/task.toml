@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/yaml-edit"
+
+[metadata]
+category = "edit"
+difficulty = "easy"
+why = "Edición precisa de configuración: cambiar dos valores sin perder comentarios ni el orden."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

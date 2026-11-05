@@ -2,38 +2,42 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 
 const sections = [
-  { name: "Fundamentos", description: "Colores, tipografía, espaciado y movimiento." },
-  { name: "Componentes", description: "Botones, tarjetas, navegación y otros elementos de interfaz." },
-  { name: "Documentación", description: "Bloques de código, avisos y contenido educativo." },
-  { name: "Benchmarks", description: "Tablas, gráficas y metadatos de las mediciones." },
-  { name: "Experiencias", description: "Onboarding, composiciones y prototipos de interacción." },
+  { name: "Foundations", description: "Color, typography, spacing, and motion.", href: "/dev/tipografia" },
+  { name: "Components", description: "Buttons, cards, navigation, and other interface elements." },
+  { name: "Documentation", description: "Code blocks, callouts, and educational content." },
+  { name: "Benchmarks", description: "Tables, charts, and measurement metadata." },
+  { name: "Experiences", description: "Onboarding, compositions, and interaction prototypes." },
 ];
 ---
 
-<BaseLayout title="Catálogo de desarrollo · flores" description="Directorio local de diseño y componentes de flores.">
+<BaseLayout title="Development catalog · flores" description="A local directory of flores designs and components.">
   <main class="mx-auto max-w-4xl px-6 py-16">
     <header class="max-w-2xl space-y-4">
-      <p class="text-sm tracking-wide text-muted uppercase">flores / desarrollo</p>
-      <h1 class="text-4xl font-semibold tracking-tight">Catálogo de componentes</h1>
+      <p class="text-sm tracking-wide text-muted uppercase">flores / development</p>
+      <h1 class="text-4xl font-semibold tracking-tight">Component catalog</h1>
       <p class="leading-relaxed text-muted">
-        Espacio de trabajo local para explorar y revisar juntos los fundamentos,
-        componentes y experiencias de la web. Todavía no hay diseños aprobados.
+        A local workspace to explore and review the website's foundations,
+        components, and experiences together. No designs have been approved yet.
       </p>
-      <p class="text-sm text-muted">Esta página solo está disponible en el servidor de desarrollo.</p>
+      <p class="text-sm text-muted">This page is only available on the development server.</p>
     </header>
 
-    <nav aria-label="Secciones del catálogo" class="mt-12">
-      <h2 class="text-xl font-semibold">Índice provisional</h2>
+    <nav aria-label="Catalog sections" class="mt-12">
+      <h2 class="text-xl font-semibold">Provisional index</h2>
       <ul class="mt-4 divide-y divide-ink/10 border-y border-ink/10">
         {sections.map((section) => (
           <li class="py-5">
             <h3 class="font-semibold">{section.name}</h3>
             <p class="mt-1 text-sm text-muted">{section.description}</p>
-            <p class="mt-2 text-xs text-muted">Pendiente de revisión</p>
+            {"href" in section ? (
+              <a href={section.href} class="mt-2 inline-block text-sm underline underline-offset-4">View typography study →</a>
+            ) : (
+              <p class="mt-2 text-xs text-muted">Awaiting review</p>
+            )}
           </li>
         ))}
       </ul>
     </nav>
-    <a class="mt-10 inline-block underline underline-offset-4" href="/">Volver al inicio</a>
+    <a class="mt-10 inline-block underline underline-offset-4" href="/">Back to home</a>
   </main>
 </BaseLayout>

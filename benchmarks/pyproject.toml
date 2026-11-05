@@ -16,6 +16,9 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
+tasks = [
+    "harbor==0.25.0",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]
@@ -30,6 +33,13 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# Task fixtures are inputs to the agents under test: their exact bytes are part
+# of the task (tests check hashes), so no tool may reformat them.
+extend-exclude = ["tasks/flores-micro"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# generate.py embeds Go sources (tab-indented) and checker scripts as strings.
+"tasks/generate.py" = ["E101", "W191", "E501"]

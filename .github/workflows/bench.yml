@@ -86,7 +86,7 @@ jobs:
       - name: Install fx
         continue-on-error: true
         run: |
-          curl -fsSL https://fx.sh/setup.sh | bash
+          curl -fsSL https://fx.sh/setup.sh | bash -s -- "v$(uv run flores-bench pinned --agent fx)"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Doctor

@@ -2,11 +2,14 @@
 
 flores-bench doctor                       what is installed, which versions
 flores-bench build                        compile mock provider + flores-stub
-flores-bench pinned                       npm specs of the pinned competitor versions
+flores-bench pinned [--agent NAME]       npm specs of the pinned competitor versions
 flores-bench perf startup [opts]          layer A: start-up latency/RSS
 flores-bench perf hello   [opts]          layer A: harness overhead per trivial turn
 flores-bench harness      [opts]          layer B: behaviour under scripted failures
 flores-bench scenarios [--write-docs]     list layer B scenarios / regenerate their docs
+flores-bench tasks list                   layer C: flores-micro tasks
+flores-bench tasks validate              layer C: oracle must score 1, nop 0 (Docker, free)
+flores-bench tasks run [opts]            layer C: real models through the meter (costs money)
 flores-bench check-budgets RESULT.json    PASS/FAIL against suites/perf/budgets.toml
 flores-bench publish RESULT.json          copy into published/ + regenerate report
 flores-bench report                       regenerate published/README.md
@@ -63,7 +66,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_pinned(args: argparse.Namespace) -> int:
-    """Print `package@version` for every npm-installable agent (used by CI)."""
+    """Print `package@version` for every npm-installable agent (used by CI).
+
+    With --agent, print only that agent's pinned version (e.g. for fx's installer).
+    """
+    if args.agent:
+        a = load_agents([args.agent])[0]
+        if not a.pinned_version:
+            print(f"{args.agent} has no pinned version", file=sys.stderr)
+            return 1
+        print(a.pinned_version)
+        return 0
     for a in load_agents():
         if a.npm and a.pinned_version:
             print(f"{a.npm}@{a.pinned_version}")
@@ -72,7 +85,7 @@ def cmd_pinned(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     build_tools()
-    print("built benchmarks/.bin/{mockprovider,flores-stub}")
+    print("built benchmarks/.bin/{mockprovider,flores-stub,meter}")
     return 0
 
 
@@ -151,6 +164,54 @@ def cmd_check_budgets(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_tasks(args: argparse.Namespace) -> int:
+    from flores_bench.paths import RESULTS_DIR as RD
+    from flores_bench.tasks import catalog, runner
+
+    tasks = catalog.load_tasks(args.tasks.split(",") if getattr(args, "tasks", None) else None)
+    if args.action == "list":
+        if args.write_docs:
+            from flores_bench.paths import BENCH_ROOT
+
+            out = BENCH_ROOT / "docs" / "flores-micro.md"
+            out.write_text(catalog.render_docs(tasks))
+            print(out)
+            return 0
+        for t in tasks:
+            print(f"{t.category:<10} {t.difficulty:<7} {t.name:<28} {t.why}")
+        return 0
+    build_tools()
+    jobs = (RD / "jobs").resolve()
+    jobs.mkdir(parents=True, exist_ok=True)
+    if args.action == "validate":
+        res = runner.validate(tasks, jobs, concurrent=args.concurrent)
+        bad = 0
+        for name, r in res.items():
+            mark = "PASS" if r["ok"] else "FAIL"
+            bad += not r["ok"]
+            err = r.get("oracle_error") or r.get("nop_error") or ""
+            print(f"  {mark}  {name:<28} oracle={r.get('oracle')} nop={r.get('nop')} {err}")
+        print(f"{len(res) - bad}/{len(res)} tasks valid")
+        return 1 if bad else 0
+    result = runner.run_campaign(
+        tasks,
+        args.agents.split(",") if args.agents else None,
+        tier=args.tier,
+        k=args.k,
+        upstream=args.upstream,
+        budget_usd=args.budget_usd,
+        jobs_dir=jobs,
+        max_requests_per_trial=args.max_requests_per_trial,
+    )
+    out = _save(result, args.out)
+    print()
+    print(report.render_tasks(result))
+    print(f"\nspent: {result['spent_usd']:.4f} USD\nraw result: {out}")
+    if args.publish:
+        print(report.publish(result))
+    return 0
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     for f in args.results:
         print(report.publish(json.loads(Path(f).read_text())))
@@ -181,7 +242,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="show installed agents and tools").set_defaults(fn=cmd_doctor)
     sub.add_parser("build", help="build Go helper binaries").set_defaults(fn=cmd_build)
-    sub.add_parser("pinned", help="print pinned npm specs of competitor agents").set_defaults(fn=cmd_pinned)
+    pn = sub.add_parser("pinned", help="print pinned npm specs of competitor agents")
+    pn.add_argument("--agent", help="print only this agent's pinned version")
+    pn.set_defaults(fn=cmd_pinned)
 
     perf = sub.add_parser("perf", help="layer A performance suites")
     perf.add_argument("suite", choices=["startup", "hello"])
@@ -208,6 +271,31 @@ def build_parser() -> argparse.ArgumentParser:
     sc = sub.add_parser("scenarios", help="list layer B scenarios")
     sc.add_argument("--write-docs", action="store_true", help="regenerate docs/harness-scenarios.md")
     sc.set_defaults(fn=cmd_scenarios)
+
+    tk = sub.add_parser("tasks", help="layer C: flores-micro tasks via Harbor")
+    tk_sub = tk.add_subparsers(dest="action", required=True)
+    for name in ("list", "validate", "run"):
+        a = tk_sub.add_parser(name)
+        a.add_argument("--tasks", help="comma-separated subset of task names")
+        a.set_defaults(fn=cmd_tasks)
+        if name == "list":
+            a.add_argument("--write-docs", action="store_true", help="regenerate docs/flores-micro.md")
+        if name == "validate":
+            a.add_argument("--concurrent", type=int, default=4)
+        if name == "run":
+            a.add_argument("--agents", help="comma-separated subset: claude-code,codex,pi,fx")
+            a.add_argument("--tier", default="cheap", help="model tier from suites/tasks/campaign.toml")
+            a.add_argument("-k", type=int, default=3, help="attempts per task (pass^k)")
+            a.add_argument(
+                "--upstream",
+                choices=["mock", "gateway", "direct"],
+                default="mock",
+                help="mock: free dry run; gateway: Cloudflare AI Gateway; direct: provider APIs",
+            )
+            a.add_argument("--budget-usd", type=float, default=0.0, help="hard spend cap (required unless mock)")
+            a.add_argument("--max-requests-per-trial", type=int, default=200)
+            a.add_argument("--out", type=Path)
+            a.add_argument("--publish", action="store_true")
 
     cb = sub.add_parser("check-budgets", help="check result files against budgets.toml")
     cb.add_argument("results", nargs="+")

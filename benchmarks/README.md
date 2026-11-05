@@ -13,7 +13,7 @@ Resultados publicados: [`published/README.md`](published/README.md).
 |---|---|---|---|---|
 | **A. Sistema / perf** | arranque, RSS, CPU, overhead del harness por turno y bytes enviados al modelo | No (mock) | 0 € | ✅ F1 |
 | **B. Comportamiento del harness** | bucle de tools, errores del proveedor, reintentos, streams cortados, límites… con escenarios guionizados | No (mock) | 0 € | ✅ F2 (13 escenarios) |
-| **C. Tareas end-to-end** | tasa de éxito, tokens, coste y tiempo en tareas reales (micro-suite propia, Terminal-Bench, SWE-bench) | Sí | € | ⏳ F3–F4 |
+| **C. Tareas end-to-end** | tasa de éxito, tokens, coste y tiempo en tareas reales (micro-suite propia, Terminal-Bench, SWE-bench) | Sí | € | 🟡 F3: 18 tareas `flores-micro` + medidor de coste; F4: benchmarks externos |
 
 Detalles en [`docs/methodology.md`](docs/methodology.md).
 
@@ -21,6 +21,7 @@ Detalles en [`docs/methodology.md`](docs/methodology.md).
 
 - Go ≥ 1.25, [uv](https://docs.astral.sh/uv/) y [hyperfine](https://github.com/sharkdp/hyperfine) ≥ 1.19 (la referencia es la 2.0.0).
 - Opcional: los agentes con los que comparar (Pi, Claude Code, Codex, fx). Si alguno no está instalado, se marca como "no medido".
+- Capa C: Docker (en macOS vale colima) y el grupo `tasks` de uv (`uv sync --group tasks` instala Harbor).
 
 ```sh
 brew install uv hyperfine        # macOS
@@ -50,6 +51,17 @@ uv run flores-bench check-budgets results/startup.json
 uv run flores-bench trajectory validate run.jsonl
 ```
 
+Capa C (tareas reales; necesita Docker y `--group tasks`):
+
+```sh
+uv run --group tasks flores-bench tasks list
+uv run --group tasks flores-bench tasks validate                  # oracle = 1, nop = 0 (gratis)
+uv run --group tasks flores-bench tasks run --upstream mock -k 1  # ensayo completo sin coste
+# Con modelos reales: claves y gateway en el entorno, nunca en ficheros del repo.
+#   export ANTHROPIC_API_KEY=… OPENAI_API_KEY=… CF_ACCOUNT_ID=… CF_GATEWAY_ID=… [CF_AIG_TOKEN=…]
+uv run --group tasks flores-bench tasks run --upstream gateway --tier cheap -k 3 --budget-usd 2
+```
+
 ## Estructura
 
 ```
@@ -57,13 +69,17 @@ benchmarks/
 ├── flores_bench/          # paquete Python: CLI, runners, adaptadores, estadística, informes
 │   ├── adapters/          # cómo arrancar y conectar cada agente al mock
 │   ├── perf/              # capa A: startup.py, hello.py
-│   └── harness/           # capa B: escenarios, checks, runner
+│   ├── harness/           # capa B: escenarios, checks, runner
+│   └── tasks/             # capa C: catálogo, Harbor, medidor, runner
 ├── tools/                 # helpers en Go (mismo lenguaje que flores)
 │   ├── mockprovider/      # proveedor LLM falso: OpenAI Chat, OpenAI Responses, Anthropic Messages
-│   └── flores-stub/       # agente mínimo que cumple el contrato headless
+│   ├── flores-stub/       # agente mínimo que cumple el contrato headless
+│   └── meter/             # proxy medidor: claves fuera de los agentes, tokens, coste y tope de gasto
 ├── schema/                # trajectory.v0.schema.json: el contrato de salida del agente
 ├── scenarios/harness/     # capa B: guion del mock + expectativas de cada escenario
+├── tasks/flores-micro/    # capa C: tareas en formato Harbor (generate.py las genera)
 ├── suites/perf/           # agents.toml (versiones fijadas) y budgets.toml (límites de CI)
+├── suites/tasks/          # campaign.toml (tiers de modelos) y pricing.json (precios oficiales)
 ├── tests/                 # pytest
 ├── docs/                  # metodología, métricas, contrato, formato de resultados, adaptadores
 ├── results/               # resultados crudos (en .gitignore)
@@ -79,6 +95,7 @@ benchmarks/
 - [Clasificación de pruebas](docs/test-taxonomy.md): niveles N0–N3 según lo fiable que es cada prueba y qué puede bloquear la CI.
 - [Pipeline y arquitectura](docs/pipeline.md): qué hace cada pieza y qué ejecuta la CI.
 - [Escenarios de la capa B](docs/harness-scenarios.md): cada fallo guionizado y por qué importa (generado).
+- [Tareas flores-micro](docs/flores-micro.md): cada tarea de la capa C y qué capacidad mide (generado).
 - [Métricas](docs/metrics.md): definición exacta de cada número.
 - [Contrato headless y trayectorias](docs/trajectory-schema.md): lo que `flores run` debe emitir.
 - [Formato y publicación de resultados](docs/results-format.md): JSON → Markdown → web.

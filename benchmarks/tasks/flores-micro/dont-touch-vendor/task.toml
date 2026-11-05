@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/dont-touch-vendor"
+
+[metadata]
+category = "constraints"
+difficulty = "easy"
+why = "Respetar una restricción explícita: el error aparece en vendor/, pero el bug está en el código propio."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

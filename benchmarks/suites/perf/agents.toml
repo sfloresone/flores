@@ -28,5 +28,6 @@ npm = "@openai/codex"
 model = "gpt-6.1-sol"
 
 [agents.fx]
-# Install: curl -fsSL https://fx.sh/setup.sh | bash
+# Install: curl -fsSL https://fx.sh/setup.sh | bash -s -- v0.0.16
+version = "0.0.16"
 model = "openai/gpt-6.1-sol"

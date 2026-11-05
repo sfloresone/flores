@@ -1,0 +1,125 @@
+name: Tasks (layer C)
+
+# Layer C: end-to-end tasks in Docker (flores-micro), run through Harbor.
+#
+# - pull_request / push touching the tasks: `validate` checks every task with
+#   Harbor's oracle (must score 1) and nop (must score 0). No model, no cost.
+# - workflow_dispatch: a campaign with real models. Manual only, budget
+#   required, and the API keys live in the `real-models` environment, so this is
+#   the only job that can see them (configure required reviewers there to make
+#   every paid run need an explicit approval).
+#
+# Keys reach only the meter process (tools/meter); Harbor and the agent
+# containers get a per-run meter token. See benchmarks/docs/methodology.md.
+
+on:
+  pull_request:
+    paths:
+      - "benchmarks/tasks/**"
+      - "benchmarks/flores_bench/tasks/**"
+      - "benchmarks/tools/meter/**"
+      - ".github/workflows/tasks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "benchmarks/tasks/**"
+      - "benchmarks/flores_bench/tasks/**"
+      - "benchmarks/tools/meter/**"
+      - ".github/workflows/tasks.yml"
+  workflow_dispatch:
+    inputs:
+      budget_usd:
+        description: "Hard spending cap in USD for the whole campaign (required)"
+        required: true
+      tier:
+        description: "Model tier from suites/tasks/campaign.toml"
+        type: choice
+        options: [cheap, frontier]
+        default: cheap
+      k:
+        description: "Runs per task"
+        default: "3"
+      agents:
+        description: "Comma-separated agents (empty = all in campaign.toml)"
+        default: ""
+      tasks:
+        description: "Comma-separated tasks (empty = all)"
+        default: ""
+      upstream:
+        description: "gateway (Cloudflare AI Gateway) or mock (free dry run)"
+        type: choice
+        options: [gateway, mock]
+        default: gateway
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: benchmarks
+
+jobs:
+  validate:
+    name: Validate tasks (oracle = 1, nop = 0)
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/go.mod
+          cache-dependency-path: benchmarks/go.mod
+      - uses: astral-sh/setup-uv@v5
+      - name: Meter tests
+        run: go test -race ./tools/meter/...
+      - name: Task docs are up to date
+        run: uv run --group tasks flores-bench tasks list --write-docs && git diff --exit-code -- docs/flores-micro.md
+      - name: Generated tasks are up to date
+        run: uv run python tasks/generate.py && git diff --exit-code -- tasks/flores-micro
+      - name: Validate
+        run: uv run --group tasks flores-bench tasks validate --concurrent 4
+
+  campaign:
+    name: Campaign (${{ inputs.tier }}, k=${{ inputs.k }}, ${{ inputs.upstream }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: real-models
+    timeout-minutes: 300
+    concurrency:
+      group: tasks-campaign
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/go.mod
+          cache-dependency-path: benchmarks/go.mod
+      - uses: astral-sh/setup-uv@v5
+      - name: Run campaign
+        env:
+          # Inputs go through env, never interpolated into the script.
+          BUDGET_USD: ${{ inputs.budget_usd }}
+          TIER: ${{ inputs.tier }}
+          K: ${{ inputs.k }}
+          AGENTS: ${{ inputs.agents }}
+          TASKS: ${{ inputs.tasks }}
+          UPSTREAM: ${{ inputs.upstream }}
+          ANTHROPIC_API_KEY: ${{ inputs.upstream == 'gateway' && secrets.ANTHROPIC_API_KEY || '' }}
+          OPENAI_API_KEY: ${{ inputs.upstream == 'gateway' && secrets.OPENAI_API_KEY || '' }}
+          CF_ACCOUNT_ID: ${{ inputs.upstream == 'gateway' && secrets.CF_ACCOUNT_ID || '' }}
+          CF_GATEWAY_ID: ${{ inputs.upstream == 'gateway' && secrets.CF_GATEWAY_ID || '' }}
+          CF_AIG_TOKEN: ${{ inputs.upstream == 'gateway' && secrets.CF_AIG_TOKEN || '' }}
+        run: |
+          args=(--upstream "$UPSTREAM" --tier "$TIER" -k "$K" --budget-usd "$BUDGET_USD" --out results/tasks.json)
+          [ -n "$AGENTS" ] && args+=(--agents "$AGENTS")
+          [ -n "$TASKS" ] && args+=(--tasks "$TASKS")
+          uv run --group tasks flores-bench tasks run "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasks-${{ inputs.tier }}-${{ github.run_id }}
+          # Compact result only; Harbor job dirs contain full agent transcripts.
+          path: benchmarks/results/tasks.json
+          if-no-files-found: warn

@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/config-from-readme"
+
+[metadata]
+category = "navigation"
+difficulty = "easy"
+why = "Leer la documentación del propio repo para configurar algo correctamente, no adivinar."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

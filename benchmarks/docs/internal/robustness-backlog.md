@@ -38,8 +38,11 @@ Prioridad: 🔴 puede dar resultados engañosos · 🟡 mejora · 🟢 menor.
 ## Reproducibilidad
 
 - 🟡 `publish` no avisa si el árbol tenía cambios sin commitear.
-- 🟡 El `.deb` de hyperfine no se verifica y fx se instala con `curl | bash` sin
-  versión fijada.
+- 🟡 El `.deb` de hyperfine no se verifica, y fx se sigue instalando con `curl | bash`
+  (sin checksum). ✅ Su versión ya está fijada: la CI pasa `v$(flores-bench pinned --agent fx)`.
+- 🟡 Capa C: las imágenes base de las tareas (`python:3.13-slim`, `golang:1.25-bookworm`,
+  `node:24-slim`) van por tag, no por digest. Una actualización upstream puede cambiar
+  una tarea sin que cambie el repo. La validación oracle/nop lo detectaría solo si rompe.
 - 🟢 Las acciones de GitHub están fijadas por tag (`@v4`), no por hash.
 
 ## Ruido de medición

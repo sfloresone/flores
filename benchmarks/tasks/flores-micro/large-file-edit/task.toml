@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/large-file-edit"
+
+[metadata]
+category = "edit"
+difficulty = "easy"
+why = "Editar una función en un fichero de 3.000 líneas sin reescribirlo ni truncarlo."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

@@ -1,0 +1,19 @@
+schema_version = "1.4"
+
+[task]
+name = "flores-micro/noisy-tests"
+
+[metadata]
+category = "debug"
+difficulty = "medium"
+why = "1.500 tests y unas 22.000 líneas de salida con un único fallo: gestionar salidas enormes sin perder el error."
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+cpus = 1
+memory_mb = 2048

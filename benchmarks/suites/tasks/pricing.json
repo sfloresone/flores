@@ -1,0 +1,19 @@
+{
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing ; https://developers.openai.com/api/docs/pricing",
+  "date": "2026-11-05",
+  "note": "USD per million tokens, standard tier. cache_write = 5-minute write. Re-check before each real-model campaign; the meter refuses any model not listed here.",
+  "models": {
+    "claude-haiku-5-5": {
+      "input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write": 0.125,
+      "long_above_prompt_tokens": 100000,
+      "long": { "input": 0.50, "output": 2.50, "cache_read": 0.05, "cache_write": 0.625 }
+    },
+    "claude-sonnet-5-5": { "input": 2.00, "output": 10.00, "cache_read": 0.10, "cache_write": 2.50 },
+    "gpt-5.4-mini": { "input": 0.75, "output": 4.50, "cache_read": 0.075 },
+    "gpt-6.1-sol": {
+      "input": 2.00, "output": 10.00, "cache_read": 0.10,
+      "long_above_prompt_tokens": 272000,
+      "long": { "input": 4.00, "output": 15.00, "cache_read": 0.20 }
+    }
+  }
+}
