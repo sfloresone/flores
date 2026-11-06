@@ -144,7 +144,9 @@
         "properties": {
           "kind": { "enum": ["provider", "tool", "limit", "internal"] },
           "message": { "type": "string" },
-          "retryable": { "type": "boolean" }
+          "retryable": { "type": "boolean" },
+          "attempt": { "type": "integer", "minimum": 1, "description": "The attempt of the step that failed (provider errors)." },
+          "retry_in_ms": { "type": "number", "minimum": 0, "description": "Set when the agent will resend the request after this wait." }
         }
       }
     },

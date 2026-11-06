@@ -51,7 +51,7 @@ Esquema formal: [`schema/trajectory.v1.schema.json`](../schema/trajectory.v1.sch
 | `tool.call` | `step`, `id`, `name`, `arguments` | el modelo pide una tool |
 | `tool.result` | `step`, `id`, `ok`, `duration_ms`, `output_bytes` (+ `error`) | la tool terminó; `id` debe existir en un `tool.call` anterior |
 | `context.compact` | `before_tokens`, `after_tokens` (+ `strategy`) | se compactó el historial |
-| `error` | `kind` (`provider`/`tool`/`limit`/`internal`), `message`, `retryable` | algo falló |
+| `error` | `kind` (`provider`/`tool`/`limit`/`internal`), `message`, `retryable` (+ `attempt`, `retry_in_ms`) | algo falló |
 | `session.end` | `status` (`success`/`error`/`max_steps`/`repetition`/`cancelled`), `steps`, `duration_ms`, `usage`, `tool_calls`, `tool_errors` (+ `final_text`) | último evento, una sola vez |
 
 `usage` = `{input_tokens, output_tokens, cache_read_tokens?, cache_write_tokens?}`.
@@ -60,6 +60,17 @@ Cuando para un freno (`max_steps` o `repetition`), `flores` hace **un paso más*
 sin tools en el que avisa al modelo del motivo y le pide un resumen de lo hecho y
 lo pendiente. Ese paso aparece en la trayectoria como cualquier otro y cuenta en
 `steps`; el resumen llega en `final_text`.
+
+**Reintentos** ([ADR 0004](../../docs/adr/0004-reintentos.md)). Un reintento
+reenvía la misma petición dentro del **mismo paso**: no hay `step.start` nuevo.
+Cada intento fallido deja tres eventos:
+- un `llm.request` con su `attempt`;
+- un `llm.response` con `status: "error"`;
+- un `error` con `retryable: true`, el `attempt` que falló y `retry_in_ms`, la
+  espera antes del siguiente.
+
+Si el agente se rinde, el `error` final no lleva `retry_in_ms`. El banco cuenta
+los reintentos como peticiones de más en un mismo paso.
 
 Ejemplo (salida real de `flores-stub` contra el escenario `tool-roundtrip`, abreviada):
 

@@ -55,10 +55,17 @@ func (e *Emitter) Record(ev agent.Event) {
 		r := ev.Request
 		e.emit("llm.request", map[string]any{
 			"step": ev.Step, "request_bytes": r.Bytes, "messages": r.Messages,
-			"tools": r.Tools, "system_bytes": r.SystemBytes, "attempt": 1,
+			"tools": r.Tools, "system_bytes": r.SystemBytes, "attempt": max(r.Attempt, 1),
 		})
 	case agent.EventResponse:
 		e.response(ev.Step, ev.Response)
+	case agent.EventRetry:
+		// The failed attempt's error, and when the next one goes out.
+		r := ev.Retry
+		e.emit("error", map[string]any{
+			"kind": "provider", "message": r.Err.Error(), "retryable": true,
+			"attempt": r.Attempt - 1, "retry_in_ms": ms(r.Delay),
+		})
 	case agent.EventToolCall:
 		c := ev.ToolCall
 		var args any = string(c.Input) // invalid JSON is kept as a string
@@ -91,13 +98,9 @@ func (e *Emitter) response(step int, r *agent.ResponseStats) {
 	if r.HTTPStatus != 0 {
 		fields["http_status"] = r.HTTPStatus
 	}
-	if r.Err != nil {
+	if r.Err != nil { // the error event follows: a retry, or the end of the turn
 		fields["status"] = "error"
 		e.emit("llm.response", fields)
-		var pe *provider.Error
-		if errors.As(r.Err, &pe) {
-			e.emit("error", map[string]any{"kind": "provider", "message": pe.Error(), "retryable": pe.Retryable()})
-		}
 		return
 	}
 	fields["status"] = "ok"
@@ -109,26 +112,25 @@ func (e *Emitter) response(step int, r *agent.ResponseStats) {
 }
 
 func (e *Emitter) end(res *agent.Result) {
+	if res.Err != nil && res.Status != agent.StatusCancelled {
+		var pe *provider.Error
+		if errors.As(res.Err, &pe) {
+			e.emit("error", map[string]any{"kind": "provider", "message": res.Err.Error(), "retryable": pe.Retryable()})
+		} else {
+			e.emit("error", map[string]any{"kind": "internal", "message": res.Err.Error(), "retryable": false})
+		}
+	}
 	switch res.Status {
 	case agent.StatusMaxSteps:
 		e.emit("error", map[string]any{"kind": "limit", "message": "reached --max-steps", "retryable": false})
 	case agent.StatusRepetition:
 		e.emit("error", map[string]any{"kind": "limit", "message": "repeated tool call", "retryable": false})
-	case agent.StatusError:
-		if res.Err != nil && !isProvider(res.Err) { // provider errors were reported with their response
-			e.emit("error", map[string]any{"kind": "internal", "message": res.Err.Error(), "retryable": false})
-		}
 	}
 	e.emit("session.end", map[string]any{
 		"status": string(res.Status), "steps": res.Steps, "duration_ms": ms(time.Since(e.start)),
 		"usage": res.Usage, "tool_calls": res.ToolCalls, "tool_errors": res.ToolErrors,
 		"final_text": res.FinalText,
 	})
-}
-
-func isProvider(err error) bool {
-	var pe *provider.Error
-	return errors.As(err, &pe)
 }
 
 // Err returns the first error writing the stream, if any.
