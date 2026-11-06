@@ -49,8 +49,19 @@ type Error struct {
 	RetryAfter time.Duration
 	// Message is the provider's explanation, when it gave one.
 	Message string
-	Err     error
+	// Retry is the provider's own advice (x-should-retry header), if any.
+	Retry RetryHint
+	Err   error
 }
+
+// RetryHint is a provider's explicit advice on retrying.
+type RetryHint int
+
+const (
+	RetryUnset RetryHint = iota // no advice: decide by Kind
+	RetryYes
+	RetryNo
+)
 
 func (e *Error) Error() string {
 	s := e.Kind.String()
@@ -69,8 +80,15 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.Err }
 
 // Retryable reports whether sending the same request again can succeed.
-// Auth and bad requests never fix themselves (layer B: auth-error-fail-fast).
+// Auth errors never fix themselves, whatever the provider says (layer B:
+// auth-error-fail-fast; ADR 0004). Otherwise the provider's hint wins.
 func (e *Error) Retryable() bool {
+	if e.Kind == ErrAuth {
+		return false
+	}
+	if e.Retry != RetryUnset {
+		return e.Retry == RetryYes
+	}
 	switch e.Kind {
 	case ErrNetwork, ErrRateLimit, ErrOverloaded, ErrTruncated:
 		return true
