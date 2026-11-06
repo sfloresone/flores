@@ -94,6 +94,14 @@ Resultados completos en [`published/README.md`](../published/README.md). Lo más
   eso es dinero sin techo. flores-stub para a los 8 pasos (`--max-steps`).
   flores no tiene límite por defecto, pero detecta la repetición y para en 6
   peticiones (5 pasos y uno de resumen; [ADR 0003](../../docs/adr/0003-bucle-del-agente.md)).
+- **`Retry-After` largo: casi nadie lo gestiona bien.** En `retry-after-too-long`
+  (429 pidiendo esperar una hora) solo Claude Code y flores fallan en el acto.
+  - fx recorta la espera a 30 s y vuelve a pedir.
+  - Pi ignora la cabecera y reintenta a los 2, 4 y 8 s (4 peticiones).
+  - Codex se queda esperando en silencio.
+
+  Medido en local (macOS); los datos de referencia los publica la CI de Linux.
+  Detalle en el [ADR 0004](../../docs/adr/0004-reintentos.md).
 - **401 no siempre falla rápido.** Pi y fx abandonan a la primera. Codex hace 6
   intentos (≈6 s) y Claude Code sigue reintentando con backoff durante más de
   60 s. Una clave inválida no se arregla reintentando.

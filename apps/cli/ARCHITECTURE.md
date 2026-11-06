@@ -7,8 +7,8 @@ los ADR: [0001](../../docs/adr/0001-estructura-y-estilo-go.md) (estructura),
 [0002](../../docs/adr/0002-interfaz-provider.md) (proveedor) y
 [0003](../../docs/adr/0003-bucle-del-agente.md) (bucle).
 
-Estado: **hito M0**. Hay bucle y proveedor Anthropic, pero todavía no hay tools
-ni reintentos.
+Estado: **hito M1a**. Hay bucle, proveedor Anthropic y reintentos
+([ADR 0004](../../docs/adr/0004-reintentos.md)), pero todavía no hay tools.
 
 ## Los paquetes
 
@@ -16,7 +16,7 @@ ni reintentos.
 |---|---|---|
 | `cmd/flores` | Lee flags y variables de entorno, crea el proveedor y el agente, escribe la salida y elige el código de salida. | Lógica del agente o del protocolo. |
 | `internal/agent` | El bucle: llama al modelo, responde a las tools, aplica los frenos y pide el resumen final. | Hablar HTTP, formatear la salida, reintentar. |
-| `internal/provider` | Tipos propios (`Message`, `Request`, `Event`, `Error`) y la interfaz `Provider`. | Conocer a ningún proveedor concreto. |
+| `internal/provider` | Tipos propios (`Message`, `Request`, `Event`, `Error`), la interfaz `Provider` y los reintentos (`RetryPolicy`, `WithRetry`). | Conocer a ningún proveedor concreto. |
 | `internal/provider/anthropic` | El protocolo Messages API con `net/http`: cuerpo, cabeceras, SSE y errores. | Reintentar o decidir qué hacer con las tools. |
 | `internal/trajectory` | Traduce los eventos del agente a `trajectory/v1` (JSONL). | Decidir nada sobre la ejecución. |
 
@@ -44,6 +44,15 @@ ni reintentos.
 
    Si algo falla, devuelve un `*provider.Error` ya clasificado (`Auth`,
    `RateLimit`, `Overloaded`…).
+
+   Encima va **`provider.WithRetry`**. Si el error es transitorio (429, 5xx,
+   stream cortado…):
+   - emite `EventRetry`;
+   - espera lo que diga `RetryPolicy.Delay`;
+   - reenvía la misma petición.
+
+   El paso descarta el texto parcial del intento fallido, y el historial solo
+   guarda la respuesta buena. Un 401 nunca se reintenta.
 5. **Si el modelo pidió tools**, `runTools` las responde. En M0 todas devuelven
    el error `unknown tool`. Los resultados se añaden al historial y el bucle
    vuelve al paso 3.

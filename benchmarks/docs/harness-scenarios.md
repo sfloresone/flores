@@ -67,6 +67,12 @@ solo aparece si el comando se ejecutó de verdad y su salida volvió al modelo.
 
 **Se espera:** sale con 0; termina antes del timeout; peticiones = 3; reintentos = 2; stdout contiene «Recovered after rate limit.»; ≤ 30 s. <sub>timeout 60 s</sub>
 
+### `retry-after-too-long`: 429 con Retry-After de una hora: fallar en el acto
+
+**Por qué:** Si el proveedor pide esperar una hora, reintentar antes gasta peticiones que van a fallar, y esperar sin avisar deja al usuario colgado. Lo correcto es fallar enseguida, explicando cuánto pidió esperar.
+
+**Se espera:** sale con error; termina antes del timeout; peticiones = 1; ≤ 5 s. <sub>timeout 45 s</sub>
+
 ### `server-error-recover`: 503 transitorio: reintentar
 
 **Por qué:** Los errores 5xx y de sobrecarga son transitorios. Un solo fallo no debe tumbar la sesión.
