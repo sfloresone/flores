@@ -4,8 +4,8 @@ name: Benchmarks
 #
 # - pull_request: tests + benchmarks + budget gate; results uploaded as an artifact.
 # - push to main: same, then the compact results are published into
-#   benchmarks/published/ and committed back ([skip ci]) so they are versioned
-#   and the website can read them.
+#   benchmarks/published/ so they are versioned and the website can read them.
+#   They reach main through a pull request the job opens and merges itself.
 # - workflow_dispatch: manual run (e.g. after bumping a competitor version).
 #
 # No step here talks to a real model: every agent runs against the mock provider.
@@ -62,7 +62,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     permissions:
-      contents: write # only used to commit published results on main
+      contents: write # only used to push the published-results branch on main
+      pull-requests: write # ...and to open and merge its pull request
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -114,17 +115,28 @@ jobs:
           path: benchmarks/results/*.json
           if-no-files-found: warn
 
-      - name: Publish and commit results
+      # main only accepts pull requests (ruleset protect-main), so the results
+      # go through a PR that this job opens and merges itself. Pushes and PRs
+      # made with GITHUB_TOKEN trigger no workflows, so this cannot loop.
+      - name: Publish results (through a pull request)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           uv run flores-bench publish results/startup.json results/hello.json results/harness.json
-          git config user.name "flores-bench[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add published
           if git diff --cached --quiet; then
             echo "no changes to publish"
             exit 0
           fi
-          git commit -m "bench: publish linux results for ${GITHUB_SHA::10} [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          short="${GITHUB_SHA::10}"
+          branch="bench/publish-$short"
+          title="bench: publish linux results for $short [skip ci]"
+          git config user.name "flores-bench[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -m "$title"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "$title" \
+            --body "Linux reference results for $GITHUB_SHA, published by the [Benchmarks run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Only benchmarks/published/ changes."
+          gh pr merge "$branch" --squash --delete-branch --subject "$title"

@@ -67,8 +67,14 @@ Cada línea de `history.jsonl` tiene `{created_at, sha, dirty, cpu, subjects: {n
 1. **En un PR**: tests, después `perf startup` y `perf hello` en `ubuntu-latest`,
    con los competidores instalados en sus versiones fijadas, y el control de
    presupuestos. Los resultados crudos se suben como *artifact*.
-2. **En un push a `main`**: lo mismo, y además `flores-bench publish` y un
-   commit automático de `published/` con `[skip ci]`.
+2. **En un push a `main`**: lo mismo, y además `flores-bench publish`. Como
+   `main` solo acepta PRs (ruleset `protect-main`), el job:
+   - sube `published/` a una rama `bench/publish-<sha>`;
+   - abre una PR;
+   - la mergea él mismo (squash, `[skip ci]`).
+
+   Requiere *Settings → Actions → General → "Allow GitHub Actions to create
+   and approve pull requests"*.
 3. **Ejecuciones locales** (macOS u otras): `make bench && make publish` y se
    commitean a mano. Se guardan en su propia carpeta de plataforma y nunca pisan
    la referencia de Linux.
