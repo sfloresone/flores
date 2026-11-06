@@ -15,11 +15,13 @@ uniform int uVisible;      // particles drawn at full size (1/fov); the rest are
 uniform float uMaxPoint;   // point size cap, in DPR-2 pixels (same on every device)
 uniform int uDetail;       // curl octaves on top of the base one: 0..4 (4 = pmndrs, 3 = Maxime)
 uniform bool uCubeSeeds;   // seeds in a cube of side 4 (Maxime) instead of a sphere of radius 128 (pmndrs)
-uniform float uPetals;     // 0 = off: pure reference simulation
+uniform float uBloom;      // 0 = the reference cloud, 1 = petals; values between morph
+uniform float uPetals;     // number of petals
 uniform float uLayers;     // 1..3 rings of petals
 uniform float uTurbulence; // how much of the reference curl motion is added to the petals
 uniform float uCup;        // how much the petals curve towards the camera
 uniform float uWidth;      // petal width: 1 = neighbouring petals touch
+uniform vec2 uOffset;      // screen-space shift, in half screens (-1..1)
 
 out float vDistance;
 
@@ -219,26 +221,27 @@ vec3 simulate(vec3 seed) {
   return mix(pos, c, cnoise(pos + t));
 }
 
-// Flower mode: petals are built geometrically (symmetry alone does not make
-// petals: the curl output is a nearly uniform shell) and the reference curl
-// motion is added on top as organic turbulence. theta picks the petal and the
-// place across it; v the place from base to tip.
+// The cloud, and flower mode: petals are built geometrically (symmetry alone
+// does not make petals: the curl output is a nearly uniform shell) and the
+// cloud's motion is added on top as organic turbulence. uBloom morphs from one
+// to the other. theta picks the petal and the place across it; v the place
+// from base to tip.
 vec3 bloom(vec3 seed, float theta, float v, float h) {
-  if (uPetals < 1.0) return simulate(seed);
+  vec3 sim = uBloom < 1.0 || uTurbulence > 0.0 ? simulate(seed) : vec3(0.0);
+  if (uBloom <= 0.0) return sim;
   const float PI = 3.14159265;
   float layer = floor(h * uLayers);
-  float sector = 2.0 * PI / uPetals;
+  float sector = 2.0 * PI / max(uPetals, 1.0);
   float j = floor(theta / sector);
   float u = theta / sector - j - 0.5;              // across the petal, -0.5..0.5
   u = sign(u) * pow(abs(2.0 * u), 0.55) * 0.5;     // denser at the edges: the outline reads
   float w = pow(v, 0.45);                          // base to tip, denser towards the rim
   float profile = pow(sin(PI * pow(w, 0.8)), 0.6); // narrow base, widest past the middle
-  float t = uTime * 0.015;
-  float size = 1.05 * (1.0 - 0.3 * layer) * (1.0 + 0.035 * sin(t * 0.7 + layer * 1.3));
+  float size = 1.05 * (1.0 - 0.3 * layer);
   float angle = (j + 0.5 + 0.5 * layer) * sector + u * sector * uWidth * profile;
   float r = size * w;
   vec3 petal = vec3(r * cos(angle), r * sin(angle), uCup * r * r - 0.12 * layer);
-  return uTurbulence > 0.0 ? petal + simulate(seed) * uTurbulence * 0.3 : petal;
+  return mix(sim, petal + sim * uTurbulence * 0.3, uBloom);
 }
 
 void main() {
@@ -254,6 +257,7 @@ void main() {
 
   vec4 mvPosition = uView * vec4(bloom(seed, theta, z * 0.5 + 0.5, unit(h2)), 1.0);
   gl_Position = uProjection * mvPosition;
+  gl_Position.xy += uOffset * gl_Position.w; // an image shift: the perspective is unchanged
   vDistance = abs(uFocus + mvPosition.z); // mvPosition.z is negative: distance = -z
   gl_PointSize = gl_VertexID < uVisible ? min(vDistance * uBlur, uMaxPoint) * uPixelRatio * 0.5 : 1.0;
 }

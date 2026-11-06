@@ -5,9 +5,14 @@
  * keeps the state as a preset plus the values that differ from it:
  *   /dev/bloom?preset=maxime&p={"curl":0.15,"fov":0}
  * Add &adaptive=0 to keep the full resolution while measuring.
+ *
+ * "escena" loads one scene of the landing story and "progreso" scrubs through
+ * the story as scrolling would; "Copiar escena" copies the values in the
+ * format of scenes.ts.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { OPTIONS, PRESETS, RANGES } from "../components/bloom/params";
+import { STORIES } from "../components/bloom/scenes";
 import "./dev.css";
 ---
 
@@ -18,6 +23,18 @@ import "./dev.css";
       <label class="row">
         <span>preset</span>
         <select name="preset">{Object.keys(PRESETS).map((name) => <option>{name}</option>)}</select>
+      </label>
+      <label class="row">
+        <span>escena</span>
+        <select name="scene">
+          <option value="">—</option>
+          {STORIES.landing.map((s) => <option>{s.name}</option>)}
+        </select>
+      </label>
+      <label class="row">
+        <span>progreso</span>
+        <input type="range" name="progress" min="0" max={STORIES.landing.length - 1} step="0.01" value="0" />
+        <output />
       </label>
       {
         Object.entries(OPTIONS).map(([key, choices]) => (
@@ -39,6 +56,7 @@ import "./dev.css";
       <div class="actions">
         <button type="button" id="copy">Copiar parámetros</button>
         <button type="button" id="reset">Restablecer</button>
+        <button type="button" id="copy-scene">Copiar escena</button>
       </div>
       <output id="stats" class="stats">[stats] …</output>
     </form>
@@ -93,6 +111,7 @@ import "./dev.css";
   .actions {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
     margin-top: 4px;
   }
   .actions button {
@@ -113,6 +132,10 @@ import "./dev.css";
 <script>
   import { createBloom } from "../components/bloom/engine";
   import { PRESETS, RANGES, type BloomParams } from "../components/bloom/params";
+  import { STORIES, STORY_BASES } from "../components/bloom/scenes";
+  import { sample } from "../components/bloom/story";
+
+  const scenes = STORIES.landing;
 
   type Preset = keyof typeof PRESETS;
   const url = new URL(location.href);
@@ -166,9 +189,23 @@ import "./dev.css";
       history.replaceState(null, "", url);
     };
 
+    const progress = field("progress") as HTMLInputElement;
+    const scrub = (p: number) => {
+      progress.value = `${p}`;
+      progress.nextElementSibling!.textContent = p.toFixed(2);
+      preset = "maxime"; // the landing's scenes are built on it
+      update(sample(scenes, p, { ...bloom.params }));
+    };
+
     form.addEventListener("input", (e) => {
       const el = e.target as HTMLInputElement | HTMLSelectElement;
-      if (el.name === "preset") {
+      if (el.name === "scene") {
+        const i = scenes.findIndex((s) => s.name === el.value);
+        if (i >= 0) scrub(i);
+      } else if (el.name === "progress") {
+        field("scene").value = "";
+        scrub(Number(el.value));
+      } else if (el.name === "preset") {
         preset = el.value as Preset;
         update({ ...PRESETS[preset] });
       } else if (el.name in RANGES) {
@@ -181,6 +218,13 @@ import "./dev.css";
       void navigator.clipboard.writeText(JSON.stringify({ preset, ...changed() }));
     });
     document.querySelector("#reset")!.addEventListener("click", () => update({ ...PRESETS[preset] }));
+    document.querySelector("#copy-scene")!.addEventListener("click", () => {
+      // The values that differ from the landing's base: one entry of scenes.ts.
+      const base = STORY_BASES.landing as unknown as Record<string, unknown>;
+      const diff = Object.fromEntries(Object.entries(params).filter(([k, v]) => v !== base[k]));
+      const name = field("scene").value || "nueva";
+      void navigator.clipboard.writeText(`{ name: "${name}", params: ${JSON.stringify(diff)} },`);
+    });
 
     sync();
     bloom.start();

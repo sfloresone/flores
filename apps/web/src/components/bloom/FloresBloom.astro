@@ -3,18 +3,24 @@
  * Flores Bloom: full-bleed particle canvas. Without WebGL2 a static soft glow
  * is shown instead. The engine is bundled with this script (one request): the
  * canvas is the hero, so lazy-loading it would only add a round trip.
+ *
+ * - `params`: fixed parameters.
+ * - `story`: a story from scenes.ts, driven by the page's scroll; the page marks
+ *   one element per scene with data-bloom-scene="<name>".
  */
 import type { BloomParams } from "./params";
+import type { StoryName } from "./scenes";
 
 interface Props {
   params?: Partial<BloomParams>;
+  story?: StoryName;
   class?: string;
 }
 
-const { params = {}, class: className } = Astro.props;
+const { params = {}, story, class: className } = Astro.props;
 ---
 
-<div class:list={["flores-bloom", className]} data-params={JSON.stringify(params)}>
+<div class:list={["flores-bloom", className]} data-params={JSON.stringify(params)} data-story={story}>
   <canvas aria-hidden="true"></canvas>
 </div>
 
@@ -46,16 +52,29 @@ const { params = {}, class: className } = Astro.props;
 
 <script>
   import { createBloom } from "./engine";
+  import { STORIES, type StoryName } from "./scenes";
+  import { scrollStory, type Story } from "./story";
 
   for (const host of document.querySelectorAll<HTMLElement>(".flores-bloom")) {
     const fallback = () => host.classList.add("is-fallback");
-    const bloom = createBloom(host.querySelector("canvas")!, JSON.parse(host.dataset.params!), {
-      onError: (error) => {
-        console.error(error);
-        fallback();
+    const scenes = host.dataset.story ? STORIES[host.dataset.story as StoryName] : null;
+    let story: Story | null = null;
+    const bloom = createBloom(
+      host.querySelector("canvas")!,
+      { ...scenes?.[0]?.params, ...JSON.parse(host.dataset.params!) },
+      {
+        onFrame: () => story?.update(),
+        onError: (error) => {
+          console.error(error);
+          story?.destroy();
+          fallback();
+        },
       },
-    });
-    if (bloom) bloom.start();
-    else fallback();
+    );
+    if (!bloom) fallback();
+    else {
+      if (scenes) story = scrollStory(bloom, scenes);
+      bloom.start();
+    }
   }
 </script>

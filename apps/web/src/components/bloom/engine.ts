@@ -8,7 +8,7 @@
  */
 import { perspective, viewMatrix } from "./camera";
 import FRAGMENT from "./fragment.glsl";
-import { DEFAULTS, MAX_PARTICLES, visibleCount, type BloomParams } from "./params";
+import { DEFAULTS, MAX_PARTICLES, NUMERIC_KEYS, visibleCount, type BloomParams, type NumericKey } from "./params";
 import VERTEX from "./vertex.glsl";
 
 /** Development-only measurements (always zero in production builds). */
@@ -38,11 +38,15 @@ export interface BloomOptions {
   adaptive?: boolean;
   /** Called if the shaders fail to build (asynchronously): show a fallback. */
   onError?: (error: Error) => void;
+  /** Called at the start of every animated frame (seconds since the last one): drive set() from here. */
+  onFrame?: (dt: number) => void;
 }
 
 export interface Bloom {
   readonly params: BloomParams;
   readonly stats: BloomStats;
+  /** True when it renders still frames only (reduced motion): no frame loop, no onFrame. */
+  readonly still: boolean;
   set(params: Partial<BloomParams>): void;
   start(): void;
   stop(): void;
@@ -51,7 +55,13 @@ export interface Bloom {
 
 const NEAR = 0.1; // react-three-fiber's default camera
 const FAR = 1000;
-const LERP = 0.1; // per-frame easing of the uniforms, as in the reference
+/**
+ * Easing time constant (s): numeric parameters follow set() with
+ * k = 1 - exp(-dt / EASE), the reference's lerp(0.1) per frame at 60 Hz, but
+ * independent of the frame rate.
+ */
+const EASE = 0.16;
+const TURNS_PER_MIN = (2 * Math.PI) / 60;
 /** Point sprites larger than this (in DPR-2 pixels) are capped: same on every device. */
 const MAX_POINT = 96;
 /** Adaptive quality: every WARMUP frames, a median frame time above SLOW_MS lowers the DPR, then `detail`. */
@@ -60,7 +70,7 @@ const SLOW_MS = 18;
 
 const UNIFORMS = [
   "uProjection", "uView", "uTime", "uCurlFreq", "uFocus", "uBlur", "uPixelRatio", "uMaxPoint",
-  "uDetail", "uVisible", "uCubeSeeds", "uFalloff", "uPetals", "uLayers", "uTurbulence", "uCup", "uWidth",
+  "uDetail", "uVisible", "uCubeSeeds", "uFalloff", "uBloom", "uPetals", "uLayers", "uTurbulence", "uCup", "uWidth", "uOffset",
 ] as const;
 type Locations = Record<(typeof UNIFORMS)[number], WebGLUniformLocation | null>;
 
@@ -87,8 +97,9 @@ export function createBloom(
   const still = options.still ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const params: BloomParams = { ...DEFAULTS, ...initial };
-  // Eased uniforms: they start at the given values and then follow set() smoothly.
-  let eFocus = params.focus, eFov = params.fov, eBlur = params.blur, eCurl = params.curl;
+  // What is drawn: the numeric parameters eased towards `params`.
+  const eased = {} as Record<NumericKey, number>;
+  for (const k of NUMERIC_KEYS) eased[k] = params[k];
 
   const projection = new Float32Array(16);
   const view = new Float32Array(16);
@@ -101,15 +112,18 @@ export function createBloom(
   let raf = 0;
   let running = false; // the caller wants it running
   let visible = true;
-  let elapsed = 0;
-  let spinAngle = 0;
+  // Integrated over time, so speeds can change without jumps.
+  let elapsed = 0; // seconds (camera shake)
+  let simTime = 0; // elapsed · speed (the simulation's clock)
+  let orbit = 0; // camera angle around Y
+  let spinAngle = 0; // roll around the viewing axis
   let last = 0;
+  let lens = 0; // the lens the projection was built with
 
   // Size, read only by the ResizeObserver: no layout reads in the frame loop.
   let cssW = canvas.clientWidth, cssH = canvas.clientHeight;
   let dpr = Math.min(devicePixelRatio || 1, options.maxDpr ?? 2);
   let sizeDirty = true;
-  let paramsDirty = true; // the uniforms that only change through set()
 
   // Adaptive quality: a ring of recent frame times.
   const frameTimes = new Float32Array(WARMUP);
@@ -148,7 +162,7 @@ export function createBloom(
       timer = gl.getExtension("EXT_disjoint_timer_query_webgl2") as TimerExt | null;
       query = null;
     }
-    sizeDirty = paramsDirty = true;
+    sizeDirty = true;
     return true;
   }
 
@@ -187,40 +201,42 @@ export function createBloom(
       canvas.height = h;
     }
     g.viewport(0, 0, w, h);
-    g.uniformMatrix4fv(loc.uProjection, false, perspective(projection, params.lens, w / h, NEAR, FAR));
     g.uniform1f(loc.uPixelRatio, dpr);
     stats.dpr = dpr;
     sizeDirty = false;
+    lens = 0; // rebuild the projection for the new aspect
   }
 
-  function applyParams(g: WebGL2RenderingContext) {
-    stats.detail = Math.min(Math.round(params.detail), maxDetail);
-    g.uniform1i(loc.uDetail, stats.detail);
-    g.uniform1i(loc.uCubeSeeds, params.seeds === "cube" ? 1 : 0);
-    g.uniform1f(loc.uFalloff, params.falloff);
-    g.uniform1f(loc.uPetals, Math.round(params.petals));
-    g.uniform1f(loc.uLayers, Math.round(params.layers));
-    g.uniform1f(loc.uTurbulence, params.turbulence);
-    g.uniform1f(loc.uCup, params.cup);
-    g.uniform1f(loc.uWidth, params.width);
-    paramsDirty = false;
-  }
-
-  /** Draws one frame; false when the program is not ready yet. */
-  function draw(ease: boolean): boolean {
+  /**
+   * Advances the clocks by dt seconds and draws one frame; false when the
+   * program is not ready yet. dt < 0 renders a still frame: no easing, the
+   * clocks at a fixed moment.
+   */
+  function draw(dt: number): boolean {
     const g = gl;
     if (!g || !ready(g)) return false;
     const t0 = import.meta.env.DEV ? performance.now() : 0;
-    const k = ease ? LERP : 1;
-    eFocus += (params.focus - eFocus) * k;
-    eFov += (params.fov - eFov) * k;
-    eBlur += (params.blur - eBlur) * k;
-    eCurl += (params.curl - eCurl) * k;
-    const visible = visibleCount(eFov);
-    const count = params.dust ? MAX_PARTICLES : visible;
+    const k = dt < 0 ? 1 : 1 - Math.exp(-dt / EASE);
+    for (const key of NUMERIC_KEYS) eased[key] += (params[key] - eased[key]) * k;
+    const e = eased;
+    if (dt < 0) {
+      elapsed = 4; // a representative moment, not the very first frame
+      simTime = elapsed * e.speed;
+      orbit = -TURNS_PER_MIN * e.rotate * elapsed;
+    } else {
+      elapsed += dt;
+      simTime += dt * e.speed;
+      orbit -= TURNS_PER_MIN * e.rotate * dt;
+      spinAngle += TURNS_PER_MIN * e.spin * dt;
+    }
+    const visible = visibleCount(e.fov);
+    const count = e.dust >= 0.5 ? MAX_PARTICLES : visible;
 
     if (sizeDirty) applySize(g);
-    if (paramsDirty) applyParams(g);
+    if (lens !== e.lens) {
+      lens = e.lens;
+      g.uniformMatrix4fv(loc.uProjection, false, perspective(projection, lens, canvas.width / canvas.height, NEAR, FAR));
+    }
 
     // GPU time: one query in flight at a time; frames while it is pending are not timed.
     let timing = false;
@@ -239,13 +255,28 @@ export function createBloom(
       }
     }
 
+    // Every uniform, every frame: ~20 calls, cheaper than tracking which changed.
     g.clear(g.COLOR_BUFFER_BIT);
-    g.uniformMatrix4fv(loc.uView, false, viewMatrix(view, elapsed, params.view, spinAngle, params));
-    g.uniform1f(loc.uTime, elapsed * params.speed);
-    g.uniform1f(loc.uCurlFreq, eCurl);
-    g.uniform1f(loc.uFocus, eFocus);
-    g.uniform1f(loc.uBlur, eBlur);
+    g.uniformMatrix4fv(loc.uView, false, viewMatrix(view, orbit, spinAngle, elapsed, e.distance, e.shake));
+    g.uniform1f(loc.uTime, simTime);
+    g.uniform1f(loc.uCurlFreq, e.curl);
+    g.uniform1f(loc.uFocus, e.focus);
+    g.uniform1f(loc.uBlur, e.blur);
     g.uniform1i(loc.uVisible, visible);
+    stats.detail = Math.min(Math.round(e.detail), maxDetail);
+    g.uniform1i(loc.uDetail, stats.detail);
+    g.uniform1i(loc.uCubeSeeds, params.seeds === "cube" ? 1 : 0);
+    g.uniform1f(loc.uFalloff, e.falloff);
+    g.uniform1f(loc.uBloom, e.bloom);
+    g.uniform1f(loc.uPetals, Math.round(e.petals));
+    g.uniform1f(loc.uLayers, Math.round(e.layers));
+    g.uniform1f(loc.uTurbulence, e.turbulence);
+    g.uniform1f(loc.uCup, e.cup);
+    g.uniform1f(loc.uWidth, e.width);
+    // Portrait screens: full x from 4:3, none below 3:5, so the shape never leaves the screen.
+    const aspect = canvas.width / canvas.height;
+    const fit = Math.min(Math.max((aspect - 0.6) / (4 / 3 - 0.6), 0), 1);
+    g.uniform2f(loc.uOffset, e.x * fit, e.y);
     g.drawArrays(g.POINTS, 0, count); // no buffers: the shader uses gl_VertexID
 
     if (import.meta.env.DEV) {
@@ -272,7 +303,6 @@ export function createBloom(
       // Then the curl octaves (vertex-bound cases, e.g. all 262,144 particles):
       // the swirls lose some fine detail, the shape stays.
       maxDetail = Math.min(maxDetail, Math.round(params.detail)) - 1;
-      paramsDirty = true;
     }
   }
 
@@ -282,9 +312,8 @@ export function createBloom(
     const dtMs = last ? now - last : 0;
     last = now;
     const dt = Math.min(dtMs / 1000, 0.1);
-    elapsed += dt;
-    spinAngle += ((params.spin * Math.PI * 2) / 60) * dt;
-    draw(true);
+    options.onFrame?.(dt);
+    draw(dt);
     if (adaptive && dtMs) adapt(dtMs);
 
     if (import.meta.env.DEV) {
@@ -306,8 +335,7 @@ export function createBloom(
   }
 
   function renderStill() {
-    elapsed = 4; // a representative moment, not the very first frame
-    if (!draw(false) && gl && shaders.length) requestAnimationFrame(renderStill); // still building
+    if (!draw(-1) && gl && shaders.length) requestAnimationFrame(renderStill); // still building
   }
 
   function refresh() {
@@ -360,9 +388,9 @@ export function createBloom(
   const api: Bloom = {
     params,
     stats,
+    still,
     set(next) {
       Object.assign(params, next);
-      paramsDirty = sizeDirty = true; // sizeDirty: the projection depends on `lens`
       if (still) renderStill();
     },
     start() {

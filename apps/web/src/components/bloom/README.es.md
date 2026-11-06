@@ -31,8 +31,9 @@ pmndrs se convierte con `blur = (5.6 - aperture) * 9`. En las dos, las partícul
 que `fov` "oculta" se siguen dibujando como polvo de 1 píxel (`dust: 1`), porque
 la GPU sube su tamaño 0 a 1.
 
-La landing usa `maxime` con frequency 0.15, speedFactor 34.5, fov 0, blur 0.9 y
-focus 6.90: las 262.144 partículas, pequeñas y nítidas.
+La historia de la landing parte de `maxime` con frequency 0.15, speedFactor 34.5,
+fov 0, blur 0.9 y focus 6.90: las 262.144 partículas, pequeñas y nítidas (ver
+[Historias](#historias)).
 
 ## Cómo funciona, en cuatro ideas
 
@@ -41,9 +42,10 @@ focus 6.90: las 262.144 partículas, pequeñas y nítidas.
    posición de cada partícula depende solo de su semilla y del tiempo.
 3. **Desenfoque falso.** Cuanto más lejos está una partícula de la distancia de
    enfoque, más grande y más transparente se dibuja. No hay post-proceso.
-4. **Modo flor** (`petals > 0`). Los pétalos se construyen con geometría (cada
+4. **Modo flor** (`bloom`, 0–1). Los pétalos se construyen con geometría (cada
    partícula elige un pétalo, un sitio a lo ancho y otro de la base a la punta) y
-   encima se suma el movimiento curl del original como turbulencia.
+   encima se suma el movimiento curl del original como turbulencia. Los valores
+   entre 0 y 1 transforman la nube en la flor.
 
 ## Archivos
 
@@ -54,6 +56,8 @@ focus 6.90: las 262.144 partículas, pequeñas y nítidas.
 | `vertex.glsl`, `fragment.glsl` | Los shaders. Se minifican al compilar (ver `astro.config.ts`). |
 | `camera.ts` | La cámara del original, sin reservar memoria. |
 | `params.ts` | Parámetros, valores por defecto y rangos. |
+| `scenes.ts` | Historias: escenas ordenadas (juegos completos de parámetros) para páginas con scroll. |
+| `story.ts` | El conductor del scroll: convierte la posición de scroll en una escena interpolada. |
 
 ## Por qué es ligero
 
@@ -69,9 +73,9 @@ este motor, a cientos.
 un hash de enteros, con la misma distribución que el original. No se sube nada a
 la GPU.
 
-**Nada de memoria nueva en cada frame.** Las matrices y los buffers de tiempos se
-reservan una vez. El tamaño solo se lee cuando cambia el canvas, y los uniforms que
-solo cambian con `set()` se envían solo entonces.
+**Nada de memoria nueva en cada frame.** Las matrices, los buffers de tiempos y el
+objeto de parámetros del conductor del scroll se reservan una vez. El tamaño solo
+se lee cuando cambia el canvas; las anclas de las escenas, cuando cambia la página.
 
 **Render barato.** Canvas opaco (la página es negra de todos modos), sin MSAA (no
 aporta nada en sprites redondos), la GPU de bajo consumo preferida y un tope al
@@ -99,15 +103,17 @@ por defecto, build de producción (`astro preview`), 2026-11-05.
 
 | Qué | Resultado |
 |---|---|
-| Transferencia de la landing | **3 peticiones, 13,6 KB brotli** |
-| — HTML con el CSS en línea y los parámetros | 2,5 KB |
-| — JS del motor y el componente | 4,5 KB |
+| Transferencia de la landing | **3 peticiones, 14,1 KB brotli** |
+| — HTML con el CSS en línea | 2,4 KB |
+| — JS del motor, las escenas y el componente | 5,2 KB |
 | — Fuente del título (subconjunto latino) | 6,6 KB |
 | Primer pintado con contenido (el título) | 24–56 ms |
-| FPS sin límite de frames, valores de la landing (262.144 partículas), 3 ejecuciones | 318, 322, 330 |
+| FPS sin límite de frames, valores de la landing (262.144 partículas), 3 ejecuciones, antes de las historias | 318, 322, 330 |
 | FPS sin límite de frames, `pmndrs` sin polvo (13.108 partículas), 3 ejecuciones | 867, 869, 882 |
 | Memoria JS reservada mientras corre | ~150 B en 5 s (ruido del muestreo) |
 | Frames con la pestaña oculta | 0 |
+| FPS sin límite de frames en cada escena de la landing (inicio, seda, nube, flor), 3 ejecuciones cada una | 261–271 |
+| Memoria JS reservada recorriendo toda la historia con scroll en cada frame | ~2 KB en 1.379 frames |
 
 Sin probar: un móvil real. Con las 262.144 partículas el trabajo está en los
 vértices, así que en un móvil lento depende de que la calidad adaptativa baje
@@ -126,7 +132,7 @@ archivo y falla si se pasa de **16 KB brotli o 4 peticiones**.
 ---
 import FloresBloom from "../components/bloom/FloresBloom.astro";
 ---
-<FloresBloom class="absolute inset-0" params={{ petals: 6, view: "front", focus: 6 }} />
+<FloresBloom class="absolute inset-0" params={{ bloom: 1, rotate: 0, shake: 0, focus: 6 }} />
 ```
 
 El componente no se posiciona solo: quien lo usa le da el tamaño (arriba,
@@ -140,16 +146,63 @@ Ver `params.ts`, donde cada uno está documentado. Grupos:
 - **Simulación y desenfoque:** `focus`, `speed`, `blur`, `fov` (la fracción de
   partículas que se dibuja, no un ángulo de cámara; 0 = todas), `curl`, `detail`,
   `seeds`, `falloff`, `dust`.
-- **Cámara:** `lens` (el campo de visión de verdad), `distance`, `rotate`, `shake`.
-- **Modo flor:** `view`, `petals`, `layers`, `turbulence`, `cup`, `width`, `spin`.
+- **Cámara:** `lens` (el campo de visión de verdad), `distance`, `rotate`, `shake`,
+  `x` e `y` (posición en
+  pantalla, en medias pantallas; en pantallas verticales `x` se reduce y vale 0 por
+  debajo de 3:5, para que la forma no se salga de la pantalla de un móvil).
+- **Modo flor:** `bloom`, `petals`, `layers`, `turbulence`, `cup`, `width`, `spin`.
 
-Consejo: con `view: "front"` la flor está a unas 6 unidades de la cámara, así que
-pon `focus` cerca de 6 o casi toda saldrá borrosa y transparente.
+Todos los parámetros numéricos se acercan al valor de `set()` con una constante de
+tiempo de 0,16 s, igual a 60 que a 120 Hz, y los relojes se integran
+(`tiempo += dt · speed`), así que `speed` y `rotate` pueden cambiar sin saltos.
+
+Consejo: con `rotate: 0` y `shake: 0` la cámara mira la flor de frente a
+`distance` unidades, así que pon `focus` cerca de `distance` o casi toda saldrá
+borrosa.
+
+## Historias
+
+Una historia es una lista de escenas en `scenes.ts`; la página marca un elemento
+por escena con `data-bloom-scene="<nombre>"`:
+
+```astro
+<FloresBloom class="fixed inset-0" story="landing" />
+<section data-bloom-scene="inicio" class="h-dvh">…</section>
+<section data-bloom-scene="seda" class="h-dvh">…</section>
+```
+
+Cuando el elemento de una escena llega arriba del todo de la ventana, esa escena
+está completa; entre dos elementos los parámetros numéricos se interpolan
+(smoothstep) y los demás cambian a mitad de camino. `curl` se interpola de forma
+geométrica: se percibe como una proporción, así que la forma se dibuja de manera
+uniforme en lugar de convertirse en nube enseguida.
+
+La historia de la landing: **inicio** (la forma de seda elegida en la web de
+Maxime, en el centro bajo el título) → **seda** a la izquierda → **nube** a la
+derecha (`curl: 1`) → **flor** en el centro (`bloom: 1`, más cerca, enfocada y casi
+quieta). Siempre está en movimiento (`speed: 34.5`); las posiciones laterales dejan
+hueco al contenido. Con
+`prefers-reduced-motion` el scroll sigue cambiando la escena, un frame quieto cada
+vez.
+
+## Pendiente
+
+Anotado, sin construir aún:
+
+- Clics sobre la flor quieta: un pulso, una onda que empuja las partículas, abrir y
+  cerrar.
+- Parallax con el puntero, o un puntero que deforma el campo.
+- Transiciones disparadas por eventos, no solo por scroll.
+- Un canvas que persista entre páginas (`transition:persist`) cuando haya más
+  páginas.
 
 ## Página de ajuste
 
 `bun run dev:web` y abre `/dev/bloom`: un selector de preset y un control por
 parámetro, con FPS y tiempo de CPU y GPU por frame. La URL guarda el preset y los
 valores que cambian respecto a él (`?preset=maxime&p={"curl":0.15,"fov":0}`), y
-**Copiar parámetros** los copia en JSON. Añade `&adaptive=0` para mantener la resolución
-completa mientras mides. Esta página solo existe en el servidor de desarrollo.
+**Copiar parámetros** los copia en JSON. **escena** carga una escena de la historia
+de la landing, **progreso** la recorre como lo haría el scroll y **Copiar escena**
+copia los valores actuales como una entrada de `scenes.ts`. Añade `&adaptive=0`
+para mantener la resolución completa mientras mides. Esta página solo existe en el
+servidor de desarrollo.

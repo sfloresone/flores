@@ -39,14 +39,23 @@ export interface BloomParams {
   lens: number;
   /** Camera distance to the centre (6 in pmndrs, 5 in Maxime's). */
   distance: number;
-  /** Orbit auto-rotation, in OrbitControls units: 1 = one turn per minute. */
+  /** Orbit auto-rotation, in OrbitControls units: 1 = one turn per minute. 0 + shake 0 = a front view. */
   rotate: number;
   /** Hand-held camera shake intensity (drei CameraShake; 0 = off). */
   shake: number;
 
-  /** "orbit": rotating camera. "front": fixed camera facing the flower. */
-  view: "orbit" | "front";
-  /** Number of petals (0 = off: the pure reference shape). */
+  /**
+   * Screen position of the shape, in half screens: x -1 = left edge, 1 = right
+   * edge; y -1 = bottom, 1 = top. An image shift: the perspective is unchanged.
+   * On portrait screens x is scaled down (centred below ~3:5) so the shape
+   * stays on screen.
+   */
+  x: number;
+  y: number;
+
+  /** Flower mode, 0–1: 0 = the reference cloud, 1 = petals; values between morph. */
+  bloom: number;
+  /** Number of petals (used when `bloom` > 0). */
   petals: number;
   /** Rings of petals; inner rings are smaller and offset by half a petal. */
   layers: number;
@@ -56,11 +65,11 @@ export interface BloomParams {
   cup: number;
   /** Petal width: 1 = neighbouring petals touch, lower = thinner petals. */
   width: number;
-  /** Spin around the viewing axis in "front" view, in turns per minute. */
+  /** Spin around the viewing axis, in turns per minute. */
   spin: number;
 }
 
-const FLOWER = { view: "orbit", petals: 0, layers: 2, turbulence: 0.35, cup: 0.4, width: 0.85, spin: 0 } as const;
+const FLOWER = { x: 0, y: 0, bloom: 0, petals: 6, layers: 2, turbulence: 0.35, cup: 0.4, width: 0.85, spin: 0 } as const;
 
 export const PRESETS = {
   /** pmndrs/examples · gpgpu-curl-noise-dof, with its leva defaults. */
@@ -91,7 +100,10 @@ export const RANGES = {
   distance: { min: 1, max: 12, step: 0.1 },
   rotate: { min: -4, max: 4, step: 0.1 },
   shake: { min: 0, max: 1, step: 0.01 },
-  petals: { min: 0, max: 16, step: 1 },
+  x: { min: -1, max: 1, step: 0.01 },
+  y: { min: -1, max: 1, step: 0.01 },
+  bloom: { min: 0, max: 1, step: 0.01 },
+  petals: { min: 1, max: 16, step: 1 },
   layers: { min: 1, max: 3, step: 1 },
   turbulence: { min: 0, max: 1, step: 0.01 },
   cup: { min: -1, max: 1, step: 0.01 },
@@ -102,8 +114,13 @@ export const RANGES = {
 /** Choices for the parameters that are not numbers (used by /dev/bloom). */
 export const OPTIONS = {
   seeds: ["sphere", "cube"],
-  view: ["orbit", "front"],
 } as const;
+
+/** The numeric parameters: the ones that ease and interpolate between scenes. */
+export type NumericKey = { [K in keyof BloomParams]: BloomParams[K] extends number ? K : never }[keyof BloomParams];
+export const NUMERIC_KEYS = Object.keys(DEFAULTS).filter(
+  (k) => typeof DEFAULTS[k as keyof BloomParams] === "number",
+) as NumericKey[];
 
 /** Side of the reference's simulation texture: 512 × 512 particles at most. */
 export const GRID = 512;

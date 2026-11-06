@@ -5,14 +5,6 @@
  */
 export type Mat4 = Float32Array;
 
-export interface CameraRig {
-  distance: number;
-  /** OrbitControls autoRotateSpeed: angle per second = 2π / 60 · rotate. */
-  rotate: number;
-  /** CameraShake intensity (the effect scales with intensity²). */
-  shake: number;
-}
-
 export function perspective(out: Mat4, fovYDeg: number, aspect: number, near: number, far: number): Mat4 {
   const f = 1 / Math.tan((fovYDeg * Math.PI) / 360);
   const nf = 1 / (near - far);
@@ -31,21 +23,18 @@ function wobble(t: number, seed: number): number {
 }
 
 /**
- * View matrix at elapsed time `t` (seconds): R(pitch, yaw, roll) · lookAt(eye → origin).
- * - orbit: the reference camera (auto-rotate around Y plus a subtle shake).
- * - front: fixed in front of the flower; it spins around the viewing axis.
+ * View matrix: R(pitch, yaw, roll) · lookAt(eye → origin), with the eye at
+ * `distance` on an orbit around Y at angle `theta`. The caller integrates the
+ * angles (so speeds can change without jumps). `shake` is drei CameraShake's
+ * intensity, sampled at time `t`; 0 = a still camera ("front" view).
  */
-export function viewMatrix(out: Mat4, t: number, view: "orbit" | "front", spinAngle: number, rig: CameraRig): Mat4 {
-  const DISTANCE = rig.distance;
-  let theta = 0, pitch = 0, yaw = 0, roll = spinAngle;
-  if (view !== "front") {
-    theta = -((2 * Math.PI) / 60) * rig.rotate * t;
-    // CameraShake: yaw/pitch 0.05 at 1 Hz, roll 0.5 at 0.5 Hz, scaled by intensity².
-    const shake = rig.shake * rig.shake;
-    yaw = 0.05 * shake * wobble(t, 11);
-    pitch = 0.05 * shake * wobble(t, 23);
-    roll = 0.5 * shake * wobble(t * 0.5, 37);
-  }
+export function viewMatrix(out: Mat4, theta: number, spin: number, t: number, distance: number, shake: number): Mat4 {
+  const DISTANCE = distance;
+  // CameraShake: yaw/pitch 0.05 at 1 Hz, roll 0.5 at 0.5 Hz, scaled by intensity².
+  const s2 = shake * shake;
+  const yaw = 0.05 * s2 * wobble(t, 11);
+  const pitch = 0.05 * s2 * wobble(t, 23);
+  const roll = spin + 0.5 * s2 * wobble(t * 0.5, 37);
   // lookAt from eye = D · (sin θ, 0, cos θ) to the origin (an orbit around Y):
   // camera axes x = (cos θ, 0, -sin θ), y = (0, 1, 0), z = (sin θ, 0, cos θ),
   // translation (0, 0, -D).

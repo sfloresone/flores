@@ -30,8 +30,9 @@ Both are reproduced with parameters, as presets in `params.ts`:
 `blur = (5.6 - aperture) * 9`. In both, the particles hidden by `fov` are still
 drawn as 1-pixel dust (`dust: 1`), because the GPU clamps their size 0 to 1.
 
-The landing uses `maxime` with frequency 0.15, speedFactor 34.5, fov 0, blur 0.9
-and focus 6.90: all 262,144 particles, small and sharp.
+The landing's story is built on `maxime` with frequency 0.15, speedFactor 34.5,
+fov 0, blur 0.9 and focus 6.90: all 262,144 particles, small and sharp (see
+[Stories](#stories)).
 
 ## How it works, in four ideas
 
@@ -40,9 +41,10 @@ and focus 6.90: all 262,144 particles, small and sharp.
    fluid. The position of each particle is a function of its seed and the time.
 3. **Fake depth of field.** The further a particle is from the focus distance, the
    bigger and more transparent it is drawn. There is no post-processing.
-4. **Flower mode** (`petals > 0`). The petals are built geometrically (each particle
+4. **Flower mode** (`bloom`, 0–1). The petals are built geometrically (each particle
    picks a petal, a place across it and a place from base to tip) and the curl
-   motion of the original is added on top as turbulence.
+   motion of the original is added on top as turbulence. Values between 0 and 1
+   morph the cloud into the flower.
 
 ## Files
 
@@ -53,6 +55,8 @@ and focus 6.90: all 262,144 particles, small and sharp.
 | `vertex.glsl`, `fragment.glsl` | The shaders. Minified at build time (see `astro.config.ts`). |
 | `camera.ts` | The original's camera, without allocations. |
 | `params.ts` | Parameters, defaults and ranges. |
+| `scenes.ts` | Stories: ordered scenes (full parameter sets) for scroll-driven pages. |
+| `story.ts` | The scroll driver: maps the scroll position to an interpolated scene. |
 
 ## Why it is light
 
@@ -67,9 +71,9 @@ ran at 8–13 fps without a frame limit, against hundreds for this engine.
 an integer hash, with the same distribution as the original. Nothing is uploaded
 to the GPU.
 
-**Nothing allocated per frame.** Matrices and timing buffers are reserved once.
-The size is read only when the canvas is resized, and uniforms that only change
-with `set()` are sent only then.
+**Nothing allocated per frame.** Matrices, timing buffers and the scroll driver's
+parameter object are reserved once. The size is read only when the canvas is
+resized; scene anchors only when the page is resized.
 
 **Cheap rendering.** An opaque canvas (the page is black anyway), no MSAA (it does
 nothing for round sprites), the low-power GPU preferred, and a cap on point size
@@ -96,15 +100,17 @@ parameters, production build (`astro preview`), 2026-11-05.
 
 | What | Result |
 |---|---|
-| Landing transfer | **3 requests, 13.6 KB brotli** |
-| — HTML with inline CSS and the parameters | 2.5 KB |
-| — Engine + component JS | 4.5 KB |
+| Landing transfer | **3 requests, 14.1 KB brotli** |
+| — HTML with inline CSS | 2.4 KB |
+| — Engine, scenes and component JS | 5.2 KB |
 | — Display font (Latin subset) | 6.6 KB |
 | First contentful paint (title) | 24–56 ms |
-| FPS without frame limit, landing values (262,144 particles), 3 runs | 318, 322, 330 |
+| FPS without frame limit, landing values (262,144 particles), 3 runs, before the stories | 318, 322, 330 |
 | FPS without frame limit, `pmndrs` without dust (13,108 particles), 3 runs | 867, 869, 882 |
 | JS allocations while running | ~150 B in 5 s (sampling noise) |
 | Rendering with the tab hidden | 0 frames |
+| FPS without frame limit at each landing scene (inicio, seda, nube, flor), 3 runs each | 261–271 |
+| JS allocations while scrolling through the whole story every frame | ~2 KB in 1,379 frames |
 
 Untested: a real phone. With all 262,144 particles the work is in the vertices,
 so a slow phone relies on adaptive quality lowering `detail`.
@@ -122,7 +128,7 @@ fails above **16 KB brotli or 4 requests**.
 ---
 import FloresBloom from "../components/bloom/FloresBloom.astro";
 ---
-<FloresBloom class="absolute inset-0" params={{ petals: 6, view: "front", focus: 6 }} />
+<FloresBloom class="absolute inset-0" params={{ bloom: 1, rotate: 0, shake: 0, focus: 6 }} />
 ```
 
 The component does not position itself: the caller gives it a size (above,
@@ -136,16 +142,61 @@ See `params.ts`, where each one is documented. Groups:
 - **Simulation and depth of field:** `focus`, `speed`, `blur`, `fov` (the fraction
   of particles drawn, not a camera angle; 0 = all), `curl`, `detail`, `seeds`,
   `falloff`, `dust`.
-- **Camera:** `lens` (the real field of view), `distance`, `rotate`, `shake`.
-- **Flower mode:** `view`, `petals`, `layers`, `turbulence`, `cup`, `width`, `spin`.
+- **Camera:** `lens` (the real field of view), `distance`, `rotate`, `shake`, `x`
+  and `y` (screen
+  position in half screens; on portrait screens `x` shrinks and is 0 below 3:5,
+  so the shape stays on a phone's screen).
+- **Flower mode:** `bloom`, `petals`, `layers`, `turbulence`, `cup`, `width`, `spin`.
 
-Tip: in `view: "front"` the flower sits about 6 units from the camera, so set
-`focus` close to 6 or most of it will be blurred and transparent.
+Every numeric parameter eases towards the value given to `set()` with a time
+constant of 0.16 s, the same at 60 or 120 Hz, and the clocks are integrated
+(`time += dt · speed`), so `speed` and `rotate` can change without jumps.
+
+Tip: with `rotate: 0` and `shake: 0` the camera faces the flower at `distance`
+units, so set `focus` close to `distance` or most of it will be blurred.
+
+## Stories
+
+A story is a list of scenes in `scenes.ts`; the page marks one element per scene
+with `data-bloom-scene="<name>"`:
+
+```astro
+<FloresBloom class="fixed inset-0" story="landing" />
+<section data-bloom-scene="inicio" class="h-dvh">…</section>
+<section data-bloom-scene="seda" class="h-dvh">…</section>
+```
+
+When a scene's element reaches the top of the viewport, that scene is complete;
+between two elements the numeric parameters are interpolated (smoothstep) and the
+others switch halfway. `curl` is interpolated geometrically: it reads as a ratio,
+so the shape draws itself evenly instead of turning into a cloud early.
+
+The landing's story: **inicio** (the silk shape picked on Maxime's page, in the
+centre under the title) → **seda** on the left → **nube** on the right
+(`curl: 1`) → **flor** in the centre (`bloom: 1`, closer, in focus and almost
+still). It is always in motion (`speed: 34.5`); the side positions leave room for
+the content. With
+`prefers-reduced-motion`, scrolling still changes the scene, one still frame at a
+time.
+
+## Backlog
+
+Noted, not built yet:
+
+- Clicks on the still flower: a pulse, a wave that pushes particles, opening and
+  closing.
+- Pointer parallax or a pointer that bends the field.
+- Transitions triggered by events, not only by scroll.
+- One canvas that persists across pages (`transition:persist`) when there are more
+  pages.
 
 ## Tuning page
 
 `bun run dev:web` and open `/dev/bloom`: a preset selector and one control per
 parameter, with FPS, CPU and GPU time per frame. The URL keeps the preset and the
 values that differ from it (`?preset=maxime&p={"curl":0.15,"fov":0}`), and
-**Copiar parámetros** copies them as JSON. Add `&adaptive=0` to keep full resolution while
-measuring. Only the development server serves this page.
+**Copiar parámetros** copies them as JSON. **escena** loads one scene of the
+landing story, **progreso** scrubs through it as scrolling would, and **Copiar
+escena** copies the current values as an entry of `scenes.ts`. Add `&adaptive=0`
+to keep full resolution while measuring. Only the development server serves this
+page.
