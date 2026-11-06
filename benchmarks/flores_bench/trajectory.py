@@ -1,4 +1,4 @@
-"""Validate and summarize trajectory/v0 JSONL streams.
+"""Validate and summarize trajectory/v1 JSONL streams.
 
 The JSON Schema checks each event in isolation. `validate` adds the checks a
 schema cannot express: ordering, a single session.start/session.end pair, and
@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 from flores_bench.paths import SCHEMA_DIR
 
-SCHEMA_PATH = SCHEMA_DIR / "trajectory.v0.schema.json"
+SCHEMA_PATH = SCHEMA_DIR / "trajectory.v1.schema.json"
 
 
 @cache
@@ -94,7 +94,7 @@ def summarize(events: list[dict]) -> dict:
     duration = end.get("duration_ms", 0.0)
     return {
         "status": end.get("status"),
-        "turns": end.get("turns", 0),
+        "steps": end.get("steps", 0),
         "duration_ms": duration,
         "llm_ms": llm_ms,
         # Time spent in the harness itself: everything that is not waiting on the model.

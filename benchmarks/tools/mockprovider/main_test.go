@@ -73,7 +73,7 @@ func TestCountRuns(t *testing.T) {
 	}
 }
 
-func TestInspectSystemBytesAndTurns(t *testing.T) {
+func TestInspectSystemBytesAndSteps(t *testing.T) {
 	chat := `{"model":"m","messages":[{"role":"system","content":"abcd"},{"role":"user","content":"hi"},
 	  {"role":"assistant","tool_calls":[]},{"role":"tool","content":"x"},{"role":"assistant","content":"ok"},
 	  {"role":"user","content":[{"type":"text","text":"again"}]}],"tools":[{},{}]}`
@@ -81,14 +81,14 @@ func TestInspectSystemBytesAndTurns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.SystemBytes != 4 || info.Turn != 2 || info.Tools != 2 || info.Messages != 6 {
+	if info.SystemBytes != 4 || info.Step != 2 || info.Tools != 2 || info.Messages != 6 {
 		t.Errorf("chat: %+v", info)
 	}
 
 	anth := `{"model":"m","system":[{"type":"text","text":"abc"},{"type":"text","text":"de"}],
 	  "messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"x"},{"role":"user","content":"y"}]}`
 	info, _ = inspect(ProtoAnthropic, []byte(anth))
-	if info.SystemBytes != 5 || info.Turn != 1 {
+	if info.SystemBytes != 5 || info.Step != 1 {
 		t.Errorf("anthropic: %+v", info)
 	}
 
@@ -96,7 +96,7 @@ func TestInspectSystemBytesAndTurns(t *testing.T) {
 	  {"type":"message","role":"user","content":"hi"},{"type":"reasoning"},{"type":"function_call","call_id":"a"},
 	  {"type":"function_call","call_id":"b"},{"type":"function_call_output","call_id":"a"}]}`
 	info, _ = inspect(ProtoResponses, []byte(resp))
-	if info.SystemBytes != 6 || info.Turn != 1 {
+	if info.SystemBytes != 6 || info.Step != 1 {
 		t.Errorf("responses: %+v", info)
 	}
 }
@@ -121,7 +121,7 @@ func TestChatStreamToolCallThenText(t *testing.T) {
 		}
 	}
 
-	// Second request carries one assistant turn -> step 1 (text, multibyte safe).
+	// Second request carries one assistant message -> step 1 (text, multibyte safe).
 	resp = post(t, srv, "/v1/chat/completions",
 		`{"model":"x","messages":[{"role":"user","content":"go"},{"role":"assistant","tool_calls":[]},{"role":"tool","content":"out"}]}`)
 	var body struct {
@@ -276,9 +276,9 @@ func faultScenario(t *testing.T) *Scenario {
 	return sc
 }
 
-func history(assistantTurns int) string {
+func history(assistantSteps int) string {
 	msgs := []string{`{"role":"user","content":"go"}`}
-	for i := 0; i < assistantTurns; i++ {
+	for i := 0; i < assistantSteps; i++ {
 		msgs = append(msgs, `{"role":"assistant","content":"x"}`, `{"role":"user","content":"y"}`)
 	}
 	return "[" + strings.Join(msgs, ",") + "]"
@@ -365,7 +365,7 @@ func TestAdditionalToolsAndToolResultsCounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Tools != 3 || info.ToolResults != 1 || info.Turn != 1 {
+	if info.Tools != 3 || info.ToolResults != 1 || info.Step != 1 {
 		t.Errorf("%+v", info)
 	}
 	anth := `{"model":"m","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"tool_use"}]},

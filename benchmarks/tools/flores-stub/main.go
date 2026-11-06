@@ -1,5 +1,5 @@
 // Command flores-stub is a minimal agent that honours the flores headless
-// contract (benchmarks/docs/trajectory-schema.md) without doing anything
+// contract (benchmarks/docs/trajectory-schema.md, trajectory/v1) without doing anything
 // useful: it runs a plain chat loop against an OpenAI Chat Completions
 // endpoint and answers every tool call with an error.
 //
@@ -46,10 +46,10 @@ Run flags:
   --base-url URL     OpenAI-compatible base URL   (env FLORES_BASE_URL)
   --model NAME       model id                     (env FLORES_MODEL, default mock-model)
   --api-key KEY      API key                      (env FLORES_API_KEY)
-  --max-turns N      stop after N model turns (default 8)
+  --max-steps N      stop after N model calls (default 8)
   --timeout DUR      overall timeout (default 5m)
 
-Exit codes: 0 success, 2 usage, 3 provider error, 4 turn limit reached.
+Exit codes: 0 success, 2 usage, 3 provider error, 4 step limit reached.
 `
 
 func main() {
@@ -82,7 +82,7 @@ type config struct {
 	baseURL  string
 	model    string
 	apiKey   string
-	maxTurns int
+	maxSteps int
 	timeout  time.Duration
 }
 
@@ -102,7 +102,7 @@ func runCmd(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.baseURL, "base-url", envOr("FLORES_BASE_URL", ""), "")
 	fs.StringVar(&cfg.model, "model", envOr("FLORES_MODEL", "mock-model"), "")
 	fs.StringVar(&cfg.apiKey, "api-key", envOr("FLORES_API_KEY", ""), "")
-	fs.IntVar(&cfg.maxTurns, "max-turns", 8, "")
+	fs.IntVar(&cfg.maxSteps, "max-steps", 8, "")
 	fs.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
@@ -124,8 +124,8 @@ func runCmd(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case cfg.output != "text" && cfg.output != "jsonl":
 		fmt.Fprintln(stderr, "error: --output must be text or jsonl")
 		return exitUsage
-	case cfg.maxTurns < 1:
-		fmt.Fprintln(stderr, "error: --max-turns must be >= 1")
+	case cfg.maxSteps < 1:
+		fmt.Fprintln(stderr, "error: --max-steps must be >= 1")
 		return exitUsage
 	}
 
@@ -185,7 +185,7 @@ func strPtr(s string) *string { return &s }
 func agentLoop(ctx context.Context, cfg config, em *emitter) loopResult {
 	cwd, _ := os.Getwd()
 	em.emit("session.start", map[string]any{
-		"schema_version": "trajectory/v0",
+		"schema_version": "trajectory/v1",
 		"agent":          map[string]any{"name": "flores-stub", "version": version},
 		"model":          cfg.model,
 		"provider":       map[string]any{"name": "openai-compatible", "protocol": "openai-chat", "base_url": cfg.baseURL},
@@ -198,32 +198,32 @@ func agentLoop(ctx context.Context, cfg config, em *emitter) loopResult {
 		{Role: "user", Content: strPtr(cfg.prompt)},
 	}
 	var total usage
-	toolCalls, toolErrors, turns := 0, 0, 0
+	toolCalls, toolErrors, steps := 0, 0, 0
 	end := func(status string, res loopResult) loopResult {
 		em.emit("session.end", map[string]any{
-			"status": status, "turns": turns, "duration_ms": em.elapsed(),
+			"status": status, "steps": steps, "duration_ms": em.elapsed(),
 			"usage": total, "tool_calls": toolCalls, "tool_errors": toolErrors,
 			"final_text": res.finalText,
 		})
 		return res
 	}
 
-	for turn := 1; turn <= cfg.maxTurns; turn++ {
-		turns = turn
-		em.emit("turn.start", map[string]any{"turn": turn})
+	for step := 1; step <= cfg.maxSteps; step++ {
+		steps = step
+		em.emit("step.start", map[string]any{"step": step})
 		body, _ := json.Marshal(map[string]any{
 			"model": cfg.model, "stream": true,
 			"stream_options": map[string]any{"include_usage": true},
 			"messages":       msgs,
 		})
 		em.emit("llm.request", map[string]any{
-			"turn": turn, "request_bytes": len(body), "messages": len(msgs),
+			"step": step, "request_bytes": len(body), "messages": len(msgs),
 			"tools": 0, "system_bytes": len(systemPrompt), "attempt": 1,
 		})
 
 		resp, err := callChat(ctx, cfg, body)
 		ev := map[string]any{
-			"turn": turn, "duration_ms": resp.durationMs, "ttft_ms": resp.ttftMs,
+			"step": step, "duration_ms": resp.durationMs, "ttft_ms": resp.ttftMs,
 			"http_status": resp.httpStatus, "stop_reason": resp.finishReason, "usage": resp.usage,
 		}
 		if err != nil {
@@ -238,7 +238,7 @@ func agentLoop(ctx context.Context, cfg config, em *emitter) loopResult {
 		total.add(resp.usage)
 
 		if resp.text != "" {
-			em.emit("message", map[string]any{"turn": turn, "role": "assistant", "text": resp.text})
+			em.emit("message", map[string]any{"step": step, "role": "assistant", "text": resp.text})
 		}
 		assistant := chatMessage{Role: "assistant", Content: strPtr(resp.text), ToolCalls: resp.toolCalls}
 		msgs = append(msgs, assistant)
@@ -253,18 +253,18 @@ func agentLoop(ctx context.Context, cfg config, em *emitter) loopResult {
 			if json.Unmarshal([]byte(tc.Function.Arguments), &parsed) == nil {
 				args = parsed
 			}
-			em.emit("tool.call", map[string]any{"turn": turn, "id": tc.ID, "name": tc.Function.Name, "arguments": args})
+			em.emit("tool.call", map[string]any{"step": step, "id": tc.ID, "name": tc.Function.Name, "arguments": args})
 			out := fmt.Sprintf("error: flores-stub has no tools (requested %q)", tc.Function.Name)
 			em.emit("tool.result", map[string]any{
-				"turn": turn, "id": tc.ID, "ok": false, "duration_ms": 0.0,
+				"step": step, "id": tc.ID, "ok": false, "duration_ms": 0.0,
 				"output_bytes": len(out), "error": "tool not implemented",
 			})
 			msgs = append(msgs, chatMessage{Role: "tool", Content: strPtr(out), ToolCallID: tc.ID})
 		}
 	}
-	err := fmt.Errorf("reached --max-turns=%d", cfg.maxTurns)
+	err := fmt.Errorf("reached --max-steps=%d", cfg.maxSteps)
 	em.emit("error", map[string]any{"kind": "limit", "message": err.Error(), "retryable": false})
-	return end("max_turns", loopResult{code: exitLimit, err: err})
+	return end("max_steps", loopResult{code: exitLimit, err: err})
 }
 
 // ------------------------------------------------------------ provider

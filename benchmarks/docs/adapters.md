@@ -89,7 +89,7 @@ Resultados completos en [`published/README.md`](../published/README.md). Lo más
 - **Nadie limita los pasos por defecto en modo headless.** En `runaway-tool-loop`
   (el modelo pide tools para siempre) Pi, Claude Code, Codex y fx hicieron entre
   3000 y 7000 peticiones en 45 s hasta que el runner los mató. Con un modelo real
-  eso es dinero sin techo. flores-stub para a los 8 turnos (`--max-turns`).
+  eso es dinero sin techo. flores-stub para a los 8 pasos (`--max-steps`).
 - **401 no siempre falla rápido.** Pi y fx abandonan a la primera. Codex hace 6
   intentos (≈6 s) y Claude Code sigue reintentando con backoff durante más de
   60 s. Una clave inválida no se arregla reintentando.

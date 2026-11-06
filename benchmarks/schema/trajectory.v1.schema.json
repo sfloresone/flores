@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/sfloresone/flores/benchmarks/schema/trajectory.v0.schema.json",
-  "title": "flores trajectory event (v0)",
-  "description": "One line of the JSONL stream that `flores run --output jsonl` writes to stdout. See benchmarks/docs/trajectory-schema.md.",
+  "$id": "https://github.com/sfloresone/flores/benchmarks/schema/trajectory.v1.schema.json",
+  "title": "flores trajectory event (v1)",
+  "description": "One line of the JSONL stream that `flores -p PROMPT --output jsonl` writes to stdout. See benchmarks/docs/trajectory-schema.md.",
   "type": "object",
   "required": ["seq", "t_ms", "type"],
   "properties": {
@@ -10,7 +10,7 @@
     "t_ms": { "type": "number", "minimum": 0, "description": "Milliseconds since the process started the session (monotonic clock)." },
     "type": {
       "enum": [
-        "session.start", "turn.start", "llm.request", "llm.response", "message",
+        "session.start", "step.start", "llm.request", "llm.response", "message",
         "tool.call", "tool.result", "context.compact", "error", "session.end"
       ]
     }
@@ -27,7 +27,7 @@
       },
       "additionalProperties": false
     },
-    "turn": { "type": "integer", "minimum": 1 }
+    "step": { "type": "integer", "minimum": 1, "description": "1-based index of the model call (step) within the session." }
   },
   "allOf": [
     {
@@ -35,7 +35,7 @@
       "then": {
         "required": ["schema_version", "agent", "model", "provider", "cwd", "started_at"],
         "properties": {
-          "schema_version": { "const": "trajectory/v0" },
+          "schema_version": { "const": "trajectory/v1" },
           "agent": {
             "type": "object",
             "required": ["name", "version"],
@@ -57,15 +57,15 @@
       }
     },
     {
-      "if": { "properties": { "type": { "const": "turn.start" } } },
-      "then": { "required": ["turn"], "properties": { "turn": { "$ref": "#/$defs/turn" } } }
+      "if": { "properties": { "type": { "const": "step.start" } } },
+      "then": { "required": ["step"], "properties": { "step": { "$ref": "#/$defs/step" } } }
     },
     {
       "if": { "properties": { "type": { "const": "llm.request" } } },
       "then": {
-        "required": ["turn", "request_bytes", "messages", "tools", "system_bytes"],
+        "required": ["step", "request_bytes", "messages", "tools", "system_bytes"],
         "properties": {
-          "turn": { "$ref": "#/$defs/turn" },
+          "step": { "$ref": "#/$defs/step" },
           "request_bytes": { "type": "integer", "minimum": 0 },
           "messages": { "type": "integer", "minimum": 0 },
           "tools": { "type": "integer", "minimum": 0 },
@@ -77,9 +77,9 @@
     {
       "if": { "properties": { "type": { "const": "llm.response" } } },
       "then": {
-        "required": ["turn", "status", "duration_ms"],
+        "required": ["step", "status", "duration_ms"],
         "properties": {
-          "turn": { "$ref": "#/$defs/turn" },
+          "step": { "$ref": "#/$defs/step" },
           "status": { "enum": ["ok", "error"] },
           "http_status": { "type": "integer" },
           "ttft_ms": { "type": ["number", "null"], "minimum": 0 },
@@ -92,9 +92,9 @@
     {
       "if": { "properties": { "type": { "const": "message" } } },
       "then": {
-        "required": ["turn", "role", "text"],
+        "required": ["step", "role", "text"],
         "properties": {
-          "turn": { "$ref": "#/$defs/turn" },
+          "step": { "$ref": "#/$defs/step" },
           "role": { "enum": ["assistant", "user", "system"] },
           "text": { "type": "string" }
         }
@@ -103,9 +103,9 @@
     {
       "if": { "properties": { "type": { "const": "tool.call" } } },
       "then": {
-        "required": ["turn", "id", "name", "arguments"],
+        "required": ["step", "id", "name", "arguments"],
         "properties": {
-          "turn": { "$ref": "#/$defs/turn" },
+          "step": { "$ref": "#/$defs/step" },
           "id": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 },
           "arguments": {}
@@ -115,9 +115,9 @@
     {
       "if": { "properties": { "type": { "const": "tool.result" } } },
       "then": {
-        "required": ["turn", "id", "ok", "duration_ms", "output_bytes"],
+        "required": ["step", "id", "ok", "duration_ms", "output_bytes"],
         "properties": {
-          "turn": { "$ref": "#/$defs/turn" },
+          "step": { "$ref": "#/$defs/step" },
           "id": { "type": "string", "minLength": 1 },
           "ok": { "type": "boolean" },
           "duration_ms": { "type": "number", "minimum": 0 },
@@ -151,10 +151,10 @@
     {
       "if": { "properties": { "type": { "const": "session.end" } } },
       "then": {
-        "required": ["status", "turns", "duration_ms", "usage", "tool_calls", "tool_errors"],
+        "required": ["status", "steps", "duration_ms", "usage", "tool_calls", "tool_errors"],
         "properties": {
-          "status": { "enum": ["success", "error", "max_turns", "cancelled"] },
-          "turns": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["success", "error", "max_steps", "repetition", "cancelled"] },
+          "steps": { "type": "integer", "minimum": 0 },
           "duration_ms": { "type": "number", "minimum": 0 },
           "usage": { "$ref": "#/$defs/usage" },
           "tool_calls": { "type": "integer", "minimum": 0 },

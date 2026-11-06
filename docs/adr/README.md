@@ -13,7 +13,8 @@ por qué flores es como es, sin tener que reconstruir la conversación.
 | # | Decisión | Estado |
 |---|---|---|
 | [0001](0001-estructura-y-estilo-go.md) | Estructura del proyecto y estilo de Go: claridad antes que idioma | Propuesta |
-| [0002](0002-interfaz-provider.md) | Interfaz del proveedor de modelos | Propuesta (una pregunta abierta) |
+| [0002](0002-interfaz-provider.md) | Interfaz del proveedor de modelos | Aceptada |
+| [0003](0003-bucle-del-agente.md) | El bucle del agente: turnos, pasos y frenos | Aceptada |
 
 Plantilla: copia un ADR existente y mantén las secciones *Contexto*, *Decisión*,
 *Por qué*, *Alternativas descartadas* y *Cómo se valida*.

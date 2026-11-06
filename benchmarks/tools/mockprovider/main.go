@@ -48,7 +48,7 @@ type Record struct {
 	Status     int     `json:"status"`
 	DurationMs float64 `json:"duration_ms"`
 	UserAgent  string  `json:"user_agent,omitempty"`
-	// Attempt is 1 for the first request of a turn, 2 for its first retry...
+	// Attempt is 1 for the first request of a step, 2 for its first retry...
 	Attempt int `json:"attempt,omitempty"`
 	// Truncated is true when the mock dropped the connection on purpose.
 	Truncated bool `json:"truncated,omitempty"`
@@ -61,7 +61,7 @@ type server struct {
 
 	mu       sync.Mutex
 	records  []Record
-	attempts map[int]int // requests seen per turn since the last reset
+	attempts map[int]int // requests seen per step since the last reset
 	logFile  io.Writer
 	// dumpDir, when set, receives every request body as <seq>.json so the
 	// exact prompt and tool definitions each harness sends can be inspected.
@@ -72,14 +72,14 @@ func newServer(sc *Scenario, logFile io.Writer) *server {
 	return &server{scenario: sc, logFile: logFile, attempts: map[int]int{}}
 }
 
-// attempt counts requests per conversation turn. Retries re-send the same
-// history, so they land on the same turn; that is how fail_first and truncate
+// attempt counts requests per conversation step. Retries re-send the same
+// history, so they land on the same step; that is how fail_first and truncate
 // know whether this is a first try or a retry. Benchmarks reset between runs.
-func (s *server) attempt(turn int) int {
+func (s *server) attempt(step int) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.attempts[turn]++
-	return s.attempts[turn]
+	s.attempts[step]++
+	return s.attempts[step]
 }
 
 func (s *server) record(rec Record) {
@@ -225,11 +225,11 @@ func (s *server) route(w *statusWriter, req *http.Request, rec *Record) {
 		return
 	}
 
-	step := s.scenario.pick(info.Turn)
-	rec.Attempt = s.attempt(info.Turn)
+	step := s.scenario.pick(info.Step)
+	rec.Attempt = s.attempt(info.Step)
 	if step == nil {
 		writeError(w, proto, &StepError{Status: 500, Type: "scenario_exhausted",
-			Message: fmt.Sprintf("scenario %q has no step %d", s.scenario.Name, info.Turn)})
+			Message: fmt.Sprintf("scenario %q has no step %d", s.scenario.Name, info.Step)})
 		return
 	}
 	ttft := time.Duration(s.scenario.Latency.TTFTMs) * time.Millisecond
