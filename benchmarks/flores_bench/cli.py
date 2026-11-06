@@ -1,7 +1,7 @@
 """flores-bench command line.
 
 flores-bench doctor                       what is installed, which versions
-flores-bench build                        compile mock provider + flores-stub
+flores-bench build                        compile the Go helpers and flores (apps/cli)
 flores-bench pinned [--agent NAME]       npm specs of the pinned competitor versions
 flores-bench perf startup [opts]          layer A: start-up latency/RSS
 flores-bench perf hello   [opts]          layer A: harness overhead per trivial turn
@@ -85,7 +85,7 @@ def cmd_pinned(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     build_tools()
-    print("built benchmarks/.bin/{mockprovider,flores-stub,meter}")
+    print("built benchmarks/.bin/{mockprovider,flores-stub,meter,measure,flores}")
     return 0
 
 

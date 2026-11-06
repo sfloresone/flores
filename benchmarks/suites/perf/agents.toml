@@ -9,6 +9,10 @@
 # Other installed versions still run, but the result is flagged as a mismatch.
 # CI installs exactly these versions.
 
+[agents.flores]
+# The real agent, built from apps/cli. Speaks the Anthropic Messages API (M0).
+model = "claude-sonnet-5-5"
+
 [agents.flores-stub]
 model = "gpt-6.1-sol"
 

@@ -1,9 +1,10 @@
-"""End-to-end: flores-stub + mock provider + trajectory schema.
+"""End-to-end: flores-stub and flores + mock provider + trajectory schema.
 
-These tests pin the headless contract the real flores binary must honour.
+These tests pin the headless contract (trajectory/v1) both binaries honour.
 """
 
 import json
+import os
 import subprocess
 import urllib.request
 
@@ -13,7 +14,7 @@ from flores_bench import trajectory
 from flores_bench.adapters import ADAPTERS
 from flores_bench.harness.scenarios import HARNESS_DIR, Scenario, render_mock
 from flores_bench.mock import MockProvider
-from flores_bench.paths import STUB_BIN
+from flores_bench.paths import FLORES_BIN, STUB_BIN
 
 
 def stub_scenario(name: str, tmp_path) -> object:
@@ -115,3 +116,84 @@ def test_mock_speaks_all_protocols(path, body):
         with urllib.request.urlopen(req, timeout=10) as resp:
             text = resp.read().decode()
         assert "Hello! Nice to meet you." in text
+
+
+# ------------------------------------------------------------------ flores
+
+
+def flores_scenario(name: str, tmp_path) -> object:
+    sc = Scenario.from_dict(json.loads((HARNESS_DIR / f"{name}.json").read_text()))
+    out = tmp_path / f"{name}.json"
+    out.write_text(json.dumps(render_mock(sc, ADAPTERS["flores"])))
+    return out
+
+
+def run_flores(mock: MockProvider, *args: str) -> subprocess.CompletedProcess:
+    # A minimal environment: never hand real keys to the agent under test.
+    env = {"PATH": os.environ.get("PATH", ""), "FLORES_API_KEY": "mock", "FLORES_MODEL": "claude-test"}
+    return subprocess.run(
+        [str(FLORES_BIN), "--output", "jsonl", "--base-url", mock.url, *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+
+
+def test_flores_hello_trajectory_is_valid():
+    with MockProvider() as mock:
+        res = run_flores(mock, "-p", "hello world")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        s = trajectory.summarize(events)
+        assert s["status"] == "success" and s["steps"] == 1
+        assert s["usage"]["output_tokens"] > 0
+        (rec,) = mock.requests()
+        req = next(e for e in events if e["type"] == "llm.request")
+        assert rec["protocol"] == "anthropic-messages"
+        assert rec["request_bytes"] == req["request_bytes"]
+
+
+def test_flores_unknown_tool_roundtrip(tmp_path):
+    with MockProvider(scenario=flores_scenario("tool-roundtrip", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "list files")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        s = trajectory.summarize(events)
+        assert s["steps"] == 2 and s["tool_calls"] == 1 and s["tool_errors"] == 1
+        assert [r["step"] for r in mock.requests()] == [0, 1]
+
+
+def test_flores_runaway_loop_stops_by_repetition(tmp_path):
+    # No --max-steps: the default has no limit, so repetition detection
+    # (5 identical calls) plus one summary step must stop it.
+    with MockProvider(scenario=flores_scenario("runaway-tool-loop", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "Do the task.")
+        assert res.returncode == 4, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert events[-1]["status"] == "repetition"
+        assert len(mock.requests()) == 6
+
+
+def test_flores_max_steps_adds_one_summary_step(tmp_path):
+    with MockProvider(scenario=flores_scenario("runaway-tool-loop", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "Do the task.", "--max-steps", "2")
+        assert res.returncode == 4, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert events[-1]["status"] == "max_steps" and events[-1]["steps"] == 3
+        assert len(mock.requests()) == 3
+
+
+def test_flores_auth_error_fails_fast(tmp_path):
+    with MockProvider(scenario=flores_scenario("auth-error-fail-fast", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "hi")
+        assert res.returncode == 3
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        err = next(e for e in events if e["type"] == "error")
+        assert err["kind"] == "provider" and err["retryable"] is False
+        assert len(mock.requests()) == 1
