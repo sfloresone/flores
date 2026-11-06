@@ -15,6 +15,7 @@ Para todos los agentes:
 
 | Agente | Versión ref. | Protocolo | Cómo se apunta al mock | Comando |
 |---|---|---|---|---|
+| flores | (código) | Anthropic Messages | `FLORES_PROVIDER=anthropic`, `FLORES_BASE_URL=<mock>`, `FLORES_API_KEY=mock` | `flores -p … --output jsonl` |
 | flores-stub | — | OpenAI Chat | `FLORES_BASE_URL=<mock>/v1` | `flores-stub run --prompt …` |
 | Pi | 1.5.0 | OpenAI Responses | `PI_CODING_AGENT_DIR` con `models.json` que solo cambia `baseUrl` del proveedor `openai`; `PI_OFFLINE=1` | `pi -p --model openai/gpt-6.1-sol --no-session …` |
 | Claude Code | 2.1.318 | Anthropic Messages | `CLAUDE_CONFIG_DIR`, `ANTHROPIC_BASE_URL=<mock>`, `ANTHROPIC_API_KEY=mock`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | `claude -p --model claude-sonnet-5-5 …` |
@@ -74,6 +75,7 @@ Se descubrió volcando la primera petición de cada agente (`--dump-bodies`).
 
 | Agente | Tool | Argumentos | Modo sin permisos usado en la capa B |
 |---|---|---|---|
+| flores | `bash` | `{"command"}` (M0 no tiene tools: responde con error) | — |
 | flores-stub | `bash` | `{"command"}` (no la ejecuta: responde con error) | — |
 | Pi | `bash` | `{"command", "timeout?"}` | no tiene permisos en `-p` |
 | Claude Code | `Bash` | `{"command", "description", "timeout?"}` | `--dangerously-skip-permissions` |
@@ -90,6 +92,8 @@ Resultados completos en [`published/README.md`](../published/README.md). Lo más
   (el modelo pide tools para siempre) Pi, Claude Code, Codex y fx hicieron entre
   3000 y 7000 peticiones en 45 s hasta que el runner los mató. Con un modelo real
   eso es dinero sin techo. flores-stub para a los 8 pasos (`--max-steps`).
+  flores no tiene límite por defecto, pero detecta la repetición y para en 6
+  peticiones (5 pasos y uno de resumen; [ADR 0003](../../docs/adr/0003-bucle-del-agente.md)).
 - **401 no siempre falla rápido.** Pi y fx abandonan a la primera. Codex hace 6
   intentos (≈6 s) y Claude Code sigue reintentando con backoff durante más de
   60 s. Una clave inválida no se arregla reintentando.

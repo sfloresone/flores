@@ -1,4 +1,4 @@
-"""Concrete adapters for flores-stub and the competitor harnesses.
+"""Concrete adapters for flores, flores-stub and the competitor harnesses.
 
 How each one is pointed at the mock provider is documented in
 benchmarks/docs/adapters.md; keep both in sync.
@@ -9,7 +9,36 @@ from __future__ import annotations
 import json
 
 from flores_bench.adapters.base import Adapter, Invocation, RunContext, Unsupported
-from flores_bench.paths import STUB_BIN
+from flores_bench.paths import FLORES_BIN, STUB_BIN
+
+
+class Flores(Adapter):
+    """The real agent (apps/cli), built from source into benchmarks/.bin."""
+
+    name = "flores"
+    label = "flores"
+    binary = str(FLORES_BIN)
+    supports_trajectory = True
+
+    def path(self) -> str | None:
+        return str(FLORES_BIN) if FLORES_BIN.exists() else None
+
+    def invoke(self, ctx: RunContext) -> Invocation:
+        # Defaults only (no --max-steps): the benchmark measures what users get.
+        return Invocation(
+            argv=[str(FLORES_BIN), "-p", ctx.prompt, "--output", "jsonl" if ctx.trajectory else "text"],
+            env={
+                "FLORES_PROVIDER": "anthropic",
+                # The mock serves the Messages API at its root, like for Pi.
+                "FLORES_BASE_URL": ctx.mock_url,
+                "FLORES_MODEL": ctx.model,
+                "FLORES_API_KEY": "mock",
+            },
+        )
+
+    def shell_call(self, command: str) -> tuple[str, dict]:
+        # M0 has no tools yet; this is the name its shell tool will use (M2).
+        return "bash", {"command": command}
 
 
 class FloresStub(Adapter):
@@ -175,4 +204,4 @@ class Fx(Adapter):
         return "shell", {"action": "run", "command": command}
 
 
-ADAPTERS: dict[str, Adapter] = {a.name: a for a in (FloresStub(), Pi(), ClaudeCode(), Codex(), Fx())}
+ADAPTERS: dict[str, Adapter] = {a.name: a for a in (Flores(), FloresStub(), Pi(), ClaudeCode(), Codex(), Fx())}
