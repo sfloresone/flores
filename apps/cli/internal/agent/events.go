@@ -10,13 +10,17 @@ import (
 type EventKind int
 
 const (
-	EventStepStart  EventKind = iota + 1 // a model call starts (Step)
-	EventRequest                         // its request is sent (Request)
-	EventTextDelta                       // a chunk of assistant text (Text)
-	EventResponse                        // the model call ended, well or not (Response)
-	EventToolCall                        // the model asked for a tool (ToolCall)
-	EventToolResult                      // a tool finished (ToolResult, ToolDuration)
-	EventDone                            // the turn ended (Result); always last
+	EventStepStart EventKind = iota + 1 // a model call starts (Step)
+	EventRequest                        // its request is sent (Request)
+	EventTextDelta                      // a chunk of assistant text (Text)
+	EventResponse                       // the model call ended, well or not (Response)
+	// EventRetry: the model call failed and will be sent again (Retry).
+	// It follows the failed attempt's EventResponse. Text streamed by that
+	// attempt is not part of the answer (ADR 0004).
+	EventRetry
+	EventToolCall   // the model asked for a tool (ToolCall)
+	EventToolResult // a tool finished (ToolResult, ToolDuration)
+	EventDone       // the turn ended (Result); always last
 )
 
 // Event is one thing that happened during a turn. Step numbers the model
@@ -30,11 +34,21 @@ type Event struct {
 	ToolCall     *provider.ToolCall
 	ToolResult   *provider.ToolResult
 	ToolDuration time.Duration
+	Retry        *RetryInfo
 	Result       *Result
+}
+
+// RetryInfo describes a retry of the current step.
+type RetryInfo struct {
+	Attempt int           // the attempt that comes next (2, 3…)
+	Delay   time.Duration // wait before it
+	Err     error         // why the previous attempt failed
+	Partial bool          // the failed attempt had already streamed output
 }
 
 // RequestStats describes what one step sent to the model.
 type RequestStats struct {
+	Attempt     int // 1, or more for a retry of the same step
 	Bytes       int // body size on the wire
 	Messages    int
 	Tools       int
@@ -77,6 +91,7 @@ type Result struct {
 	Usage      provider.Usage
 	ToolCalls  int
 	ToolErrors int
+	Retries    int // model calls sent again after a transient failure
 	// FinalText is the last assistant text: the answer, or the summary when
 	// a brake stopped the turn.
 	FinalText string

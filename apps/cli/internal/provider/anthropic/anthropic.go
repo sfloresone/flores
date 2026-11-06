@@ -209,7 +209,7 @@ func transportError(ctx context.Context, err error) error {
 }
 
 func httpError(status int, header http.Header, body []byte) *provider.Error {
-	e := &provider.Error{Status: status, RetryAfter: retryAfter(header.Get("Retry-After"))}
+	e := &provider.Error{Status: status, RetryAfter: retryAfter(header), Retry: shouldRetry(header)}
 	var parsed struct {
 		Error struct {
 			Type    string `json:"type"`
@@ -228,6 +228,8 @@ func httpError(status int, header http.Header, body []byte) *provider.Error {
 		e.Kind = provider.ErrRateLimit
 	case status == http.StatusRequestTimeout:
 		e.Kind = provider.ErrNetwork
+	case status == http.StatusConflict: // a lock or a race on their side; the official SDKs retry it
+		e.Kind = provider.ErrOverloaded
 	case status >= 500: // includes Anthropic's 529 "overloaded"
 		e.Kind = provider.ErrOverloaded
 	default:
@@ -236,8 +238,13 @@ func httpError(status int, header http.Header, body []byte) *provider.Error {
 	return e
 }
 
-// retryAfter parses a Retry-After header: seconds or an HTTP date.
-func retryAfter(v string) time.Duration {
+// retryAfter reads the wait the provider asks for: retry-after-ms (more
+// precise) first, then Retry-After in seconds or as an HTTP date.
+func retryAfter(h http.Header) time.Duration {
+	if ms, err := strconv.ParseFloat(h.Get("Retry-After-Ms"), 64); err == nil && ms > 0 {
+		return time.Duration(ms * float64(time.Millisecond))
+	}
+	v := h.Get("Retry-After")
 	if v == "" {
 		return 0
 	}
@@ -248,4 +255,15 @@ func retryAfter(v string) time.Duration {
 		return max(0, time.Until(t))
 	}
 	return 0
+}
+
+// shouldRetry reads x-should-retry, the provider's explicit advice.
+func shouldRetry(h http.Header) provider.RetryHint {
+	switch strings.ToLower(h.Get("X-Should-Retry")) {
+	case "true":
+		return provider.RetryYes
+	case "false":
+		return provider.RetryNo
+	}
+	return provider.RetryUnset
 }

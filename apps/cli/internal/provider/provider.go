@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"iter"
+	"time"
 )
 
 // Provider streams one model call. It is the only thing the agent loop needs
@@ -100,6 +101,11 @@ const (
 	EventToolCall
 	// EventDone: the call finished (Usage, Stop and RawStop are set).
 	EventDone
+	// EventRetry: the attempt failed and the same request will be sent
+	// again after Delay (Err, Attempt and Delay are set). Everything
+	// streamed since the last EventSent belongs to the failed attempt and
+	// must be discarded. Only WithRetry emits it (ADR 0004).
+	EventRetry
 )
 
 // Event is one thing that happened during a model call.
@@ -112,6 +118,11 @@ type Event struct {
 	Stop     StopReason
 	// RawStop is the provider's own stop reason, kept for the trajectory.
 	RawStop string
+
+	// Retry fields (EventRetry).
+	Err     error         // why the attempt failed
+	Attempt int           // number of the attempt that comes next (2, 3…)
+	Delay   time.Duration // wait before it
 }
 
 // StopReason is why the model stopped, normalized across providers.

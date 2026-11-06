@@ -197,3 +197,42 @@ def test_flores_auth_error_fails_fast(tmp_path):
         err = next(e for e in events if e["type"] == "error")
         assert err["kind"] == "provider" and err["retryable"] is False
         assert len(mock.requests()) == 1
+
+
+def _requests_by_attempt(events):
+    return [e["attempt"] for e in events if e["type"] == "llm.request"]
+
+
+def test_flores_retries_a_server_error(tmp_path):
+    with MockProvider(scenario=flores_scenario("server-error-recover", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "Say something.")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert _requests_by_attempt(events) == [1, 2]
+        (err,) = [e for e in events if e["type"] == "error"]
+        assert err["retryable"] is True and err["attempt"] == 1 and err["retry_in_ms"] > 0
+        assert events[-1]["final_text"] == "Recovered after server error."
+        assert [r["status"] for r in mock.requests()] == [503, 200]
+
+
+def test_flores_retries_a_cut_stream_without_keeping_the_partial_text(tmp_path):
+    with MockProvider(scenario=flores_scenario("stream-truncated-recover", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "Say something.")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert events[-1]["steps"] == 1
+        assert events[-1]["final_text"] == "The quick brown fox jumps over the lazy dog."
+        # Same step, same history: the mock sees a retry, not a new step.
+        assert [r["step"] for r in mock.requests()] == [0, 0]
+
+
+def test_flores_gives_up_when_retry_after_is_too_long(tmp_path):
+    with MockProvider(scenario=flores_scenario("retry-after-too-long", tmp_path)) as mock:
+        res = run_flores(mock, "-p", "Say something.")
+        assert res.returncode == 3
+        assert "asked to wait 1h0m0s" in res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert len(mock.requests()) == 1

@@ -111,17 +111,18 @@ func (t *turn) step(ctx context.Context, choice provider.ToolChoice) (stepOutput
 		MaxTokens:  a.cfg.MaxTokens,
 	}
 	var (
-		out   stepOutput
-		text  strings.Builder
-		done  *provider.Event
-		sent  bool
-		start = time.Now()
-		stats = ResponseStats{}
+		out     stepOutput
+		text    strings.Builder
+		done    *provider.Event
+		sent    bool
+		attempt = 1
+		start   = time.Now()
+		stats   = ResponseStats{}
 	)
 	requestEvent := func(bytes int) bool {
 		sent = true
 		return t.emit(Event{Kind: EventRequest, Step: n, Request: &RequestStats{
-			Bytes: bytes, Messages: len(a.history), Tools: len(req.Tools), SystemBytes: len(req.System),
+			Attempt: attempt, Bytes: bytes, Messages: len(a.history), Tools: len(req.Tools), SystemBytes: len(req.System),
 		}})
 	}
 	for ev, err := range a.provider.Stream(ctx, req) {
@@ -139,9 +140,35 @@ func (t *turn) step(ctx context.Context, choice provider.ToolChoice) (stepOutput
 		}
 		switch ev.Kind {
 		case provider.EventSent:
+			start = time.Now() // each attempt is timed on its own
 			if !requestEvent(ev.Bytes) {
 				return out, errStopped
 			}
+		case provider.EventRetry:
+			// The attempt failed and the same request goes out again:
+			// report it, then forget everything it streamed (ADR 0004).
+			if !sent {
+				requestEvent(0)
+			}
+			failed := stats
+			failed.Duration, failed.Err = time.Since(start), ev.Err
+			var pe *provider.Error
+			if errors.As(ev.Err, &pe) {
+				failed.HTTPStatus = pe.Status
+			}
+			if !t.emit(Event{Kind: EventResponse, Step: n, Response: &failed}) {
+				return out, errStopped
+			}
+			partial := text.Len() > 0 || len(out.calls) > 0
+			t.res.Retries++
+			if !t.emit(Event{Kind: EventRetry, Step: n, Retry: &RetryInfo{
+				Attempt: ev.Attempt, Delay: ev.Delay, Err: ev.Err, Partial: partial,
+			}}) {
+				return out, errStopped
+			}
+			attempt, sent, stats = ev.Attempt, false, ResponseStats{}
+			text.Reset()
+			out.calls = nil
 		case provider.EventTextDelta:
 			stats.markFirstContent(start)
 			text.WriteString(ev.Text)

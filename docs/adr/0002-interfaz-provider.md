@@ -95,7 +95,8 @@ Las decisiones de diseño:
    falta gestionar goroutines ni cerrar canales. Es la misma elección que fantasy.
 3. **Los reintentos son un decorador:** `provider.WithRetry(p, policy)`. Se
    escriben una vez para todos los proveedores y se prueban contra los
-   escenarios del mock.
+   escenarios del mock. El [ADR 0004](0004-reintentos.md) lo amplía: antes de
+   reintentar emite un `EventRetry` para que el consumidor descarte lo parcial.
 4. **Las tool calls se emiten completas.** Ensamblar los argumentos que llegan a
    trozos por streaming es trabajo del adaptador; el bucle del agente no lo ve.
 5. **Mensajes con partes tipadas:** `Text`, `ToolCall`, `ToolResult` y, más

@@ -33,12 +33,14 @@
 # can never silently regress. flores-stub has no tools and no retries: it is
 # the "red" starting point of the behaviour TDD.
 [harness.flores]
-# M0 (no tools, no retries yet). runaway-tool-loop passes with no step limit,
-# thanks to repetition detection (ADR 0003). M1 adds the *-recover scenarios,
-# M2 the tool ones.
+# runaway-tool-loop passes with no step limit thanks to repetition detection
+# (ADR 0003); the *-recover scenarios and retry-after-too-long thanks to
+# retries (ADR 0004). M2 adds the tool scenarios.
 must_pass = [
   "basic-text", "unknown-tool", "auth-error-fail-fast", "runaway-tool-loop",
   "malformed-tool-args", "huge-output", "slow-first-token",
+  "rate-limit-recover", "server-error-recover", "stream-truncated-recover",
+  "retry-after-too-long",
 ]
 
 [harness.flores-stub]

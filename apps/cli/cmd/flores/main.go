@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -54,6 +55,8 @@ Flags:
   --base-url URL        provider base URL        (env FLORES_BASE_URL)
   --api-key KEY         API key                  (env FLORES_API_KEY or ANTHROPIC_API_KEY)
   --max-steps N         stop after N model calls; 0 = no limit (default 0)
+  --max-retries N       resend a call that failed transiently up to N times;
+                        0 = never (default 6, env FLORES_MAX_RETRIES)
   --timeout DUR         overall timeout, e.g. 10m; 0 = none (default 0)
 
 Provider: env FLORES_PROVIDER (only "anthropic" for now).
@@ -67,7 +70,7 @@ func main() {
 
 type options struct {
 	prompt, output, model, baseURL, apiKey, providerName string
-	maxSteps                                             int
+	maxSteps, maxRetries                                 int
 	timeout                                              time.Duration
 	version                                              bool
 }
@@ -95,12 +98,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		defer cancel()
 	}
 
-	p := anthropic.New(anthropic.Config{
+	policy := provider.DefaultRetryPolicy()
+	policy.MaxRetries = opts.maxRetries
+	p := provider.WithRetry(anthropic.New(anthropic.Config{
 		BaseURL:    opts.baseURL,
 		APIKey:     opts.apiKey,
 		UserAgent:  "flores/" + version,
 		HTTPClient: &http.Client{}, // one client: the connection is reused across steps
-	})
+	}), policy)
 	a := agent.New(p, agent.Config{Model: opts.model, System: systemPrompt, MaxSteps: opts.maxSteps})
 
 	var res *agent.Result
@@ -118,7 +123,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 		}
 	} else {
-		res = printText(a.Run(ctx, opts.prompt), stdout)
+		res = printText(a.Run(ctx, opts.prompt), stdout, stderr, opts.maxRetries)
 	}
 	return report(res, opts, stderr)
 }
@@ -134,6 +139,15 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 	fs.StringVar(&o.baseURL, "base-url", os.Getenv("FLORES_BASE_URL"), "")
 	fs.StringVar(&o.apiKey, "api-key", cmp.Or(os.Getenv("FLORES_API_KEY"), os.Getenv("ANTHROPIC_API_KEY")), "")
 	fs.IntVar(&o.maxSteps, "max-steps", 0, "")
+	defaultRetries := provider.DefaultRetryPolicy().MaxRetries
+	if v := os.Getenv("FLORES_MAX_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			defaultRetries = n
+		} else {
+			defaultRetries = -1 // reported below
+		}
+	}
+	fs.IntVar(&o.maxRetries, "max-retries", defaultRetries, "")
 	fs.DurationVar(&o.timeout, "timeout", 0, "")
 	fs.BoolVar(&o.version, "version", false, "")
 	fs.BoolVar(&o.version, "v", false, "")
@@ -172,6 +186,8 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 		problem = "no API key: pass --api-key or set FLORES_API_KEY / ANTHROPIC_API_KEY"
 	case o.maxSteps < 0:
 		problem = "--max-steps must be >= 0 (0 = no limit)"
+	case o.maxRetries < 0:
+		problem = "--max-retries (or FLORES_MAX_RETRIES) must be a number >= 0 (0 = never retry)"
 	}
 	if problem != "" {
 		fmt.Fprintln(stderr, "error:", problem)
@@ -180,8 +196,10 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 	return o, 0, true
 }
 
-// printText streams the assistant text to stdout as it arrives.
-func printText(events iter.Seq[agent.Event], stdout io.Writer) *agent.Result {
+// printText streams the assistant text to stdout as it arrives. Retries
+// are announced on stderr; text a failed attempt already printed stays,
+// and the new attempt starts on a fresh line (ADR 0004).
+func printText(events iter.Seq[agent.Event], stdout, stderr io.Writer, maxRetries int) *agent.Result {
 	var res *agent.Result
 	var last byte = '\n' // last byte written, to separate steps cleanly
 	for ev := range events {
@@ -191,6 +209,14 @@ func printText(events iter.Seq[agent.Event], stdout io.Writer) *agent.Result {
 				io.WriteString(stdout, "\n")
 				last = '\n'
 			}
+		case agent.EventRetry:
+			if last != '\n' {
+				io.WriteString(stdout, "\n")
+				last = '\n'
+			}
+			r := ev.Retry
+			fmt.Fprintf(stderr, "flores: %v — retrying in %s (attempt %d of %d)\n",
+				r.Err, r.Delay.Round(time.Millisecond), r.Attempt, maxRetries+1)
 		case agent.EventTextDelta:
 			if ev.Text != "" {
 				io.WriteString(stdout, ev.Text)

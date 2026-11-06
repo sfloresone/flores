@@ -7,8 +7,8 @@ the ADRs: [0001](../../docs/adr/0001-estructura-y-estilo-go.md) (structure),
 [0002](../../docs/adr/0002-interfaz-provider.md) (provider) and
 [0003](../../docs/adr/en/0003-agent-loop.md) (loop).
 
-Status: **milestone M0**. There is a loop and an Anthropic provider, but no
-tools and no retries yet.
+Status: **milestone M1a**. There is a loop, an Anthropic provider and retries
+([ADR 0004](../../docs/adr/en/0004-retries.md)), but no tools yet.
 
 ## The packages
 
@@ -16,7 +16,7 @@ tools and no retries yet.
 |---|---|---|
 | `cmd/flores` | Reads flags and environment variables, creates the provider and the agent, writes the output and picks the exit code. | Agent or protocol logic. |
 | `internal/agent` | The loop: calls the model, answers tool calls, applies the brakes and asks for the final summary. | Speak HTTP, format output, retry. |
-| `internal/provider` | Our own types (`Message`, `Request`, `Event`, `Error`) and the `Provider` interface. | Know about any specific provider. |
+| `internal/provider` | Our own types (`Message`, `Request`, `Event`, `Error`), the `Provider` interface and retries (`RetryPolicy`, `WithRetry`). | Know about any specific provider. |
 | `internal/provider/anthropic` | The Messages API protocol over `net/http`: body, headers, SSE and errors. | Retry, or decide what to do with tools. |
 | `internal/trajectory` | Turns agent events into `trajectory/v1` (JSONL). | Decide anything about the run. |
 
@@ -45,6 +45,15 @@ tools and no retries yet.
 
    If something fails, it returns a `*provider.Error` that is already
    classified (`Auth`, `RateLimit`, `Overloaded`…).
+
+   **`provider.WithRetry`** sits on top. If the error is transient (429, 5xx,
+   a cut stream…):
+   - it emits `EventRetry`;
+   - it waits as long as `RetryPolicy.Delay` says;
+   - it resends the same request.
+
+   The step discards the failed attempt's partial text, and the history only
+   keeps the good answer. A 401 is never retried.
 5. **If the model asked for tools**, `runTools` answers them. In M0 all of them
    return the error `unknown tool`. The results are appended to the history and
    the loop goes back to step 3.
