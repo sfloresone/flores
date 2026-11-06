@@ -143,20 +143,26 @@ func TestToolUseIsAssembledFromFragments(t *testing.T) {
 
 func TestHTTPErrorsAreClassified(t *testing.T) {
 	cases := []struct {
-		status     int
-		retryAfter string
-		kind       provider.ErrorKind
-		wait       time.Duration
+		status    int
+		header    map[string]string
+		kind      provider.ErrorKind
+		wait      time.Duration
+		retryable bool
 	}{
-		{401, "", provider.ErrAuth, 0},
-		{429, "2", provider.ErrRateLimit, 2 * time.Second},
-		{529, "", provider.ErrOverloaded, 0},
-		{400, "", provider.ErrBadRequest, 0},
+		{401, nil, provider.ErrAuth, 0, false},
+		{401, map[string]string{"X-Should-Retry": "true"}, provider.ErrAuth, 0, false}, // never, whatever it says
+		{429, map[string]string{"Retry-After": "2"}, provider.ErrRateLimit, 2 * time.Second, true},
+		{429, map[string]string{"Retry-After": "2", "Retry-After-Ms": "1500"}, provider.ErrRateLimit, 1500 * time.Millisecond, true},
+		{409, nil, provider.ErrOverloaded, 0, true},
+		{529, nil, provider.ErrOverloaded, 0, true},
+		{503, map[string]string{"X-Should-Retry": "false"}, provider.ErrOverloaded, 0, false},
+		{400, nil, provider.ErrBadRequest, 0, false},
+		{400, map[string]string{"x-should-retry": "true"}, provider.ErrBadRequest, 0, true},
 	}
 	for _, tc := range cases {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if tc.retryAfter != "" {
-				w.Header().Set("Retry-After", tc.retryAfter)
+			for k, v := range tc.header {
+				w.Header().Set(k, v)
 			}
 			w.WriteHeader(tc.status)
 			fmt.Fprint(w, `{"type":"error","error":{"type":"x","message":"nope"}}`)
@@ -164,8 +170,9 @@ func TestHTTPErrorsAreClassified(t *testing.T) {
 		_, err := collect(t, New(Config{BaseURL: srv.URL}), hello())
 		srv.Close()
 		var pe *provider.Error
-		if !errors.As(err, &pe) || pe.Kind != tc.kind || pe.Status != tc.status || pe.RetryAfter != tc.wait || pe.Message != "nope" {
-			t.Errorf("status %d: got %#v", tc.status, err)
+		if !errors.As(err, &pe) || pe.Kind != tc.kind || pe.Status != tc.status || pe.RetryAfter != tc.wait ||
+			pe.Message != "nope" || pe.Retryable() != tc.retryable {
+			t.Errorf("status %d %v: got %#v (retryable %v)", tc.status, tc.header, err, pe != nil && pe.Retryable())
 		}
 	}
 }
