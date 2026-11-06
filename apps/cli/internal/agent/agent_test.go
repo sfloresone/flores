@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sfloresone/flores/apps/cli/internal/provider"
 )
@@ -205,5 +206,67 @@ func TestSecondTurnKeepsHistoryAndStepNumbers(t *testing.T) {
 	events, res := run(t, a, context.Background(), "second")
 	if res.Steps != 1 || events[0].Step != 2 || len(f.requests[1].Messages) != 3 {
 		t.Fatalf("second turn: steps %d, first step %d, %d messages", res.Steps, events[0].Step, len(f.requests[1].Messages))
+	}
+}
+
+// flaky cuts the first answer after a few words, then answers in full.
+type flaky struct {
+	calls    int
+	requests []provider.Request
+}
+
+func (f *flaky) Stream(ctx context.Context, req provider.Request) iter.Seq2[provider.Event, error] {
+	f.calls++
+	f.requests = append(f.requests, req)
+	first := f.calls == 1
+	return func(yield func(provider.Event, error) bool) {
+		if !yield(provider.Event{Kind: provider.EventSent, Bytes: 100}, nil) {
+			return
+		}
+		if first {
+			if yield(provider.Event{Kind: provider.EventTextDelta, Text: "The qu"}, nil) {
+				yield(provider.Event{}, &provider.Error{Kind: provider.ErrTruncated})
+			}
+			return
+		}
+		if yield(provider.Event{Kind: provider.EventTextDelta, Text: "The quick brown fox."}, nil) {
+			yield(provider.Event{Kind: provider.EventDone, RawStop: "end_turn"}, nil)
+		}
+	}
+}
+
+func TestRetryDiscardsThePartialAttempt(t *testing.T) {
+	f := &flaky{}
+	policy := provider.RetryPolicy{MaxRetries: 2, Base: time.Millisecond, Max: time.Millisecond, MaxServerWait: time.Second}
+	a := New(provider.WithRetry(f, policy), Config{MaxSteps: 1})
+	events, res := run(t, a, context.Background(), "go")
+	if res.Status != StatusSuccess || res.Steps != 1 || res.Retries != 1 || res.FinalText != "The quick brown fox." {
+		t.Fatalf("result %+v", res)
+	}
+	want := []EventKind{EventStepStart, EventRequest, EventResponse, EventRetry, EventRequest, EventResponse, EventDone}
+	if got := kinds(events); !slices.Equal(got, want) {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	var attempts []int
+	for _, ev := range events {
+		switch {
+		case ev.Request != nil:
+			attempts = append(attempts, ev.Request.Attempt)
+		case ev.Retry != nil && (!ev.Retry.Partial || ev.Retry.Attempt != 2 || ev.Step != 1):
+			t.Fatalf("retry event %+v (step %d)", ev.Retry, ev.Step)
+		case ev.Kind == EventResponse && ev.Response.Err != nil && ev.Response.Text != "":
+			t.Fatalf("a failed attempt has no answer text: %+v", ev.Response)
+		}
+	}
+	if !slices.Equal(attempts, []int{1, 2}) {
+		t.Fatalf("attempts %v", attempts)
+	}
+	// The model never sees the cut answer: the retry resends the same
+	// history, and only the complete answer is kept.
+	if len(f.requests[0].Messages) != len(f.requests[1].Messages) || len(a.history) != 2 {
+		t.Fatalf("history: %d then %d messages sent, %d kept", len(f.requests[0].Messages), len(f.requests[1].Messages), len(a.history))
+	}
+	if text := a.history[1].Parts[0].(provider.Text).Text; text != "The quick brown fox." {
+		t.Fatalf("kept %q", text)
 	}
 }
