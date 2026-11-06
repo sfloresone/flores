@@ -1,0 +1,6 @@
+/* Utilities used only by the dev pages. global.css excludes src/dev from the
+   production scan (@source not), so each dev page imports this sheet, which
+   scans src/dev with the site's theme. It never reaches the public build. */
+@import "tailwindcss/theme.css" layer(theme) theme(reference);
+@import "../styles/theme.css" theme(static);
+@import "tailwindcss/utilities.css" layer(utilities) source("./");

@@ -1,0 +1,239 @@
+---
+/**
+ * /dev/bloom (development server only): tune Flores Bloom with native controls
+ * generated from RANGES and OPTIONS, and read its development stats. The URL
+ * keeps the state as a preset plus the values that differ from it:
+ *   /dev/bloom?preset=maxime&p={"curl":0.15,"fov":0}
+ * Add &adaptive=0 to keep the full resolution while measuring.
+ *
+ * "escena" loads one scene of the landing story and "progreso" scrubs through
+ * the story as scrolling would; "Copiar escena" copies the values in the
+ * format of scenes.ts.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { OPTIONS, PRESETS, RANGES } from "../components/bloom/params";
+import { STORIES } from "../components/bloom/scenes";
+import "./dev.css";
+---
+
+<BaseLayout title="Bloom · dev · flores">
+  <main class="bench">
+    <canvas id="bloom" aria-label="Flores Bloom"></canvas>
+    <form id="panel" class="panel" aria-label="Parámetros">
+      <label class="row">
+        <span>preset</span>
+        <select name="preset">{Object.keys(PRESETS).map((name) => <option>{name}</option>)}</select>
+      </label>
+      <label class="row">
+        <span>escena</span>
+        <select name="scene">
+          <option value="">—</option>
+          {STORIES.landing.map((s) => <option>{s.name}</option>)}
+        </select>
+      </label>
+      <label class="row">
+        <span>progreso</span>
+        <input type="range" name="progress" min="0" max={STORIES.landing.length - 1} step="0.01" value="0" />
+        <output />
+      </label>
+      {
+        Object.entries(OPTIONS).map(([key, choices]) => (
+          <label class="row">
+            <span>{key}</span>
+            <select name={key}>{choices.map((c) => <option>{c}</option>)}</select>
+          </label>
+        ))
+      }
+      {
+        Object.entries(RANGES).map(([key, r]) => (
+          <label class="row">
+            <span>{key}</span>
+            <input type="range" name={key} min={r.min} max={r.max} step={r.step} />
+            <output />
+          </label>
+        ))
+      }
+      <div class="actions">
+        <button type="button" id="copy">Copiar parámetros</button>
+        <button type="button" id="reset">Restablecer</button>
+        <button type="button" id="copy-scene">Copiar escena</button>
+      </div>
+      <output id="stats" class="stats">[stats] …</output>
+    </form>
+  </main>
+</BaseLayout>
+
+<style>
+  .bench {
+    position: fixed;
+    inset: 0;
+    background: #000;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: min(300px, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    padding: 12px;
+    display: grid;
+    gap: 6px;
+    font: 12px/1.3 ui-monospace, monospace;
+    color: #ddd;
+    background: rgb(20 20 20 / 0.85);
+    border: 1px solid #333;
+    border-radius: 8px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr) 3rem;
+    align-items: center;
+    gap: 8px;
+  }
+  input {
+    /* range inputs have an intrinsic width and margins that overflow the grid */
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+  .row output {
+    text-align: right;
+  }
+  select {
+    grid-column: span 2;
+  }
+  .actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .actions button {
+    flex: 1;
+    padding: 6px;
+    color: inherit;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .stats {
+    color: #9a9a9a;
+    white-space: pre-wrap;
+  }
+</style>
+
+<script>
+  import { createBloom } from "../components/bloom/engine";
+  import { PRESETS, RANGES, type BloomParams } from "../components/bloom/params";
+  import { STORIES, STORY_BASES } from "../components/bloom/scenes";
+  import { sample } from "../components/bloom/story";
+
+  const scenes = STORIES.landing;
+
+  type Preset = keyof typeof PRESETS;
+  const url = new URL(location.href);
+  let preset = (url.searchParams.get("preset") ?? "pmndrs") as Preset;
+  if (!(preset in PRESETS)) preset = "pmndrs";
+  let overrides: Partial<BloomParams> = {};
+  try {
+    overrides = JSON.parse(url.searchParams.get("p") || "{}");
+  } catch {
+    console.warn("/dev/bloom: ignoring an invalid ?p=");
+  }
+
+  const canvas = document.querySelector<HTMLCanvasElement>("#bloom")!;
+  const form = document.querySelector<HTMLFormElement>("#panel")!;
+  const stats = document.querySelector<HTMLOutputElement>("#stats")!;
+  const bloom = createBloom(canvas, { ...PRESETS[preset], ...overrides }, {
+    adaptive: url.searchParams.get("adaptive") !== "0",
+  });
+
+  if (!bloom) {
+    stats.textContent = "WebGL2 no disponible";
+  } else {
+    (window as unknown as { bloom: typeof bloom }).bloom = bloom; // for scripted measurements
+    const params = bloom.params as unknown as Record<string, string | number>;
+    const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
+
+    const sync = () => {
+      field("preset").value = preset;
+      for (const key of Object.keys(params)) {
+        const el = field(key);
+        if (!el) continue;
+        el.value = `${params[key]}`;
+        const out = el.nextElementSibling;
+        if (out instanceof HTMLOutputElement) out.textContent = `${+(+params[key]).toFixed(3)}`;
+      }
+    };
+
+    /** Values that differ from the preset: what to paste into <FloresBloom params>. */
+    const changed = () => {
+      const base = PRESETS[preset] as Record<string, unknown>;
+      return Object.fromEntries(Object.entries(params).filter(([k, v]) => v !== base[k]));
+    };
+
+    const update = (next: Partial<BloomParams>) => {
+      bloom.set(next);
+      sync();
+      url.searchParams.set("preset", preset);
+      const diff = changed();
+      if (Object.keys(diff).length) url.searchParams.set("p", JSON.stringify(diff));
+      else url.searchParams.delete("p");
+      history.replaceState(null, "", url);
+    };
+
+    const progress = field("progress") as HTMLInputElement;
+    const scrub = (p: number) => {
+      progress.value = `${p}`;
+      progress.nextElementSibling!.textContent = p.toFixed(2);
+      preset = "maxime"; // the landing's scenes are built on it
+      update(sample(scenes, p, { ...bloom.params }));
+    };
+
+    form.addEventListener("input", (e) => {
+      const el = e.target as HTMLInputElement | HTMLSelectElement;
+      if (el.name === "scene") {
+        const i = scenes.findIndex((s) => s.name === el.value);
+        if (i >= 0) scrub(i);
+      } else if (el.name === "progress") {
+        field("scene").value = "";
+        scrub(Number(el.value));
+      } else if (el.name === "preset") {
+        preset = el.value as Preset;
+        update({ ...PRESETS[preset] });
+      } else if (el.name in RANGES) {
+        update({ [el.name]: Number(el.value) });
+      } else if (el.name) {
+        update({ [el.name]: el.value });
+      }
+    });
+    document.querySelector("#copy")!.addEventListener("click", () => {
+      void navigator.clipboard.writeText(JSON.stringify({ preset, ...changed() }));
+    });
+    document.querySelector("#reset")!.addEventListener("click", () => update({ ...PRESETS[preset] }));
+    document.querySelector("#copy-scene")!.addEventListener("click", () => {
+      // The values that differ from the landing's base: one entry of scenes.ts.
+      const base = STORY_BASES.landing as unknown as Record<string, unknown>;
+      const diff = Object.fromEntries(Object.entries(params).filter(([k, v]) => v !== base[k]));
+      const name = field("scene").value || "nueva";
+      void navigator.clipboard.writeText(`{ name: "${name}", params: ${JSON.stringify(diff)} },`);
+    });
+
+    sync();
+    bloom.start();
+    setInterval(() => {
+      const s = bloom.stats;
+      stats.textContent =
+        `[stats] fps ${s.fps.toFixed(0)} · cpu ${s.cpuMs.toFixed(3)} ms` +
+        ` · gpu ${s.gpuMs == null ? "n/a" : `${s.gpuMs.toFixed(2)} ms`}\n` +
+        `${s.particles} partículas · dpr ${s.dpr} · detail ${s.detail}`;
+    }, 500);
+  }
+</script>

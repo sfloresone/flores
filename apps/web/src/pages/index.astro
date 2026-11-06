@@ -1,25 +1,50 @@
 ---
+import FloresBloom from "../components/bloom/FloresBloom.astro";
+import { STORIES } from "../components/bloom/scenes";
 import BaseLayout from "../layouts/BaseLayout.astro";
+
+// One full-height section per scene of the landing story (scenes.ts): the
+// harness arrives closed and unknown, draws itself, opens as a flower and
+// dissolves into a cloud. The copy for each section comes later.
+const scenes = STORIES.landing.map((s) => s.name);
 ---
 
 <BaseLayout>
-  <main class="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center gap-6 px-6 py-16">
-    <p class="text-sm tracking-wide text-muted uppercase">flores</p>
-    <h1 class="text-4xl font-semibold tracking-tight text-ink">
-      A coding agent measured before it is written.
-    </h1>
-    <p class="text-lg leading-relaxed text-muted">
-      Benchmarks first, Go agent second. This website will share what we learn
-      and the published results; charts will read the JSON files in
-      <code class="text-ink">benchmarks/published/</code>, not manually copied figures.
-    </p>
-    <p>
-      <a
-        class="text-ink underline underline-offset-4 hover:no-underline"
-        href="https://github.com/sfloresone/flores/blob/main/benchmarks/published/README.md"
-      >
-        Published results in the repository
-      </a>
-    </p>
+  <FloresBloom class="fixed inset-0" story="landing" />
+  <main>
+    {
+      scenes.map((name, i) => (
+        <section data-bloom-scene={name} class="relative h-dvh">
+          {i === 0 && (
+            <>
+              <h1 class="pointer-events-none absolute inset-x-0 top-[12vh] m-0 text-center font-display text-[clamp(3rem,9vw,7.5rem)] leading-none font-normal tracking-[-0.035em] text-cloud">
+                Flores
+              </h1>
+              <div class="scroll-hint absolute inset-x-0 bottom-8 mx-auto h-10 w-px bg-muted" aria-hidden="true" />
+            </>
+          )}
+        </section>
+      ))
+    }
   </main>
 </BaseLayout>
+
+<style>
+  /* The hint fades out as soon as scrolling starts; CSS only, no JS. The
+     timeline sits in its own, more specific rule: the minifier would otherwise
+     fold it into the animation shorthand, which browsers reject. */
+  @supports (animation-timeline: scroll()) {
+    .scroll-hint {
+      animation: hint-out linear both;
+      animation-range: 0 30vh;
+    }
+    main .scroll-hint {
+      animation-timeline: scroll(root);
+    }
+  }
+  @keyframes hint-out {
+    to {
+      opacity: 0;
+    }
+  }
+</style>

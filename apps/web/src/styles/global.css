@@ -1,15 +1,27 @@
-@import "tailwindcss";
+/* Scan only src for class names, and skip what is not markup: words in docs,
+   scripts and shaders ("blur", "ring", "hidden"…) would add unused utilities.
+   The dev-only pages scan themselves through src/dev/dev.css. */
+@import "tailwindcss" source("../");
+@import "./theme.css";
+@source not "../dev";
+@source not "../**/*.{md,ts,glsl}";
+/* Words that appear in scoped <style> blocks and comments, never as classes. */
+@source not inline("filter static");
 
-@theme {
-  --color-ink: #141414;
-  --color-cloud: #f7f7f5;
-  --color-muted: #5c5c5c;
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
+/* Redaction 35 (OFL, see ../assets/fonts/Redaction-OFL.txt): display serif for
+   titles, subset to Latin by scripts/subset-fonts.sh. Preloaded in BaseLayout. */
+@font-face {
+  font-family: "Redaction 35";
+  src: url("../assets/fonts/Redaction35-Regular.latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
 }
 
 html {
-  color: var(--color-ink);
-  background: var(--color-cloud);
+  color-scheme: dark;
+  color: var(--color-cloud);
+  background: var(--color-night);
   font-family: var(--font-sans);
 }
 
