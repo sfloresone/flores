@@ -1,10 +1,10 @@
 {
   "schema_version": "result/v0",
   "suite": "harness",
-  "created_at": "2026-11-06T10:31:20Z",
+  "created_at": "2026-11-06T12:17:43Z",
   "git": {
-    "sha": "029dc1ff42a1d47008439c7e9ca156db71cc8ee6",
-    "short": "029dc1ff42",
+    "sha": "76fdd7b563fa72e6565c6edcec5da1daf697e737",
+    "short": "76fdd7b563",
     "branch": "main",
     "dirty": true
   },
@@ -14,9 +14,9 @@
     "os_release": "7.0.0-1017-azure",
     "cpu": "AMD EPYC 7763 64-Core Processor",
     "cores": 4,
-    "mem_bytes": 16760344576,
+    "mem_bytes": 16760336384,
     "ci": true,
-    "runner": "GitHub Actions 1000000060"
+    "runner": "GitHub Actions 1000000072"
   },
   "tools": {
     "python": "3.13.18",
@@ -187,6 +187,20 @@
       }
     },
     {
+      "name": "retry-after-too-long",
+      "title": "429 con Retry-After de una hora: fallar en el acto",
+      "category": "provider-errors",
+      "why": "Si el proveedor pide esperar una hora, reintentar antes gasta peticiones que van a fallar, y esperar sin avisar deja al usuario colgado. Lo correcto es fallar enseguida, explicando cu\u00e1nto pidi\u00f3 esperar.",
+      "expect": {
+        "exit": "nonzero",
+        "llm_requests": {
+          "min": 1,
+          "max": 1
+        },
+        "max_wall_ms": 5000
+      }
+    },
+    {
       "name": "server-error-recover",
       "title": "503 transitorio: reintentar",
       "category": "provider-errors",
@@ -264,18 +278,18 @@
   ],
   "subjects": [
     {
-      "name": "flores-stub",
-      "label": "flores-stub",
+      "name": "flores",
+      "label": "flores",
       "available": true,
-      "version": "0.0.0-stub",
+      "version": "0.0.0-dev",
       "pinned_version": null,
       "version_mismatch": false,
-      "model": "gpt-6.1-sol",
+      "model": "claude-sonnet-5-5",
       "skipped_reason": null,
       "metrics": {
-        "passed": 7,
-        "applicable": 13,
-        "total": 13
+        "passed": 11,
+        "applicable": 14,
+        "total": 14
       },
       "info": {},
       "scenarios": {
@@ -321,8 +335,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 4.532,
-                "rss_mb": 7.82421875,
+                "wall_ms": 4.557,
+                "rss_mb": 7.7109375,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -387,8 +401,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 5.515,
-                "rss_mb": 7.828125,
+                "wall_ms": 4.824,
+                "rss_mb": 7.5859375,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -466,8 +480,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 5.579,
-                "rss_mb": 7.82421875,
+                "wall_ms": 5.241,
+                "rss_mb": 7.8359375,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -552,8 +566,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 6.306,
-                "rss_mb": 7.64453125,
+                "wall_ms": 6.768,
+                "rss_mb": 8.26953125,
                 "llm_requests": 4,
                 "retries": 0,
                 "max_step": 3,
@@ -628,8 +642,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 5.493,
-                "rss_mb": 7.76953125,
+                "wall_ms": 5.548,
+                "rss_mb": 7.890625,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -696,8 +710,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 5.51,
-                "rss_mb": 7.453125,
+                "wall_ms": 5.521,
+                "rss_mb": 7.9609375,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -755,8 +769,943 @@
               "observed": {
                 "exit_code": 3,
                 "timed_out": false,
-                "wall_ms": 4.816,
-                "rss_mb": 7.51953125,
+                "wall_ms": 4.869,
+                "rss_mb": 7.5859375,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  401
+                ],
+                "trajectory_errors": [],
+                "text_tail": ""
+              }
+            }
+          ]
+        },
+        "rate-limit-recover": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Recovered after rate limit.",
+                  "observed": "Recovered after rate limit."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 3,
+                    "max": 3
+                  },
+                  "observed": 3
+                },
+                {
+                  "name": "retries",
+                  "ok": true,
+                  "expected": {
+                    "min": 2,
+                    "max": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 30000,
+                  "observed": 2007
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 2007.283,
+                "rss_mb": 7.9609375,
+                "llm_requests": 3,
+                "retries": 2,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429,
+                  429,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Recovered after rate limit."
+              }
+            }
+          ]
+        },
+        "retry-after-too-long": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "nonzero",
+                  "observed": 3
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 5000,
+                  "observed": 5
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 3,
+                "timed_out": false,
+                "wall_ms": 4.537,
+                "rss_mb": 7.76953125,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429
+                ],
+                "trajectory_errors": [],
+                "text_tail": ""
+              }
+            }
+          ]
+        },
+        "server-error-recover": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Recovered after server error.",
+                  "observed": "Recovered after server error."
+                },
+                {
+                  "name": "retries",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 30000,
+                  "observed": 470
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 470.377,
+                "rss_mb": 7.76953125,
+                "llm_requests": 2,
+                "retries": 1,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  503,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Recovered after server error."
+              }
+            }
+          ]
+        },
+        "huge-output": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "flores-big-0123456789abcdef-flores-big",
+                  "observed": "9abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-"
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 30000,
+                  "observed": 28
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 27.969,
+                "rss_mb": 15.3828125,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "def-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-flores-big-0123456789abcdef-"
+              }
+            }
+          ]
+        },
+        "slow-first-token": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Worth the wait.",
+                  "observed": "Worth the wait."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 8012.149,
+                "rss_mb": 7.76953125,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Worth the wait."
+              }
+            }
+          ]
+        },
+        "stream-truncated-recover": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "The quick brown fox jumps over the lazy dog.",
+                  "observed": "The quick brown fox jumps over the lazy dog."
+                },
+                {
+                  "name": "retries",
+                  "ok": true,
+                  "expected": {
+                    "min": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 30000,
+                  "observed": 105
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 105.256,
+                "rss_mb": 7.83203125,
+                "llm_requests": 2,
+                "retries": 1,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 1,
+                "statuses": [
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "The quick brown fox jumps over the lazy dog."
+              }
+            }
+          ]
+        },
+        "runaway-tool-loop": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "max": 50
+                  },
+                  "observed": 6
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 4,
+                "timed_out": false,
+                "wall_ms": 8.309,
+                "rss_mb": 8.3359375,
+                "llm_requests": 6,
+                "retries": 0,
+                "max_step": 5,
+                "tool_results": 5,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "flores-stub",
+      "label": "flores-stub",
+      "available": true,
+      "version": "0.0.0-stub",
+      "pinned_version": null,
+      "version_mismatch": false,
+      "model": "gpt-6.1-sol",
+      "skipped_reason": null,
+      "metrics": {
+        "passed": 8,
+        "applicable": 14,
+        "total": 14
+      },
+      "info": {},
+      "scenarios": {
+        "basic-text": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Hello from the mock provider.",
+                  "observed": "Hello from the mock provider."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 4.321,
+                "rss_mb": 7.390625,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Hello from the mock provider."
+              }
+            }
+          ]
+        },
+        "malformed-tool-args": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Recovered from bad arguments.",
+                  "observed": "Recovered from bad arguments."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 2,
+                    "max": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "tool_results",
+                  "ok": true,
+                  "expected": {
+                    "min": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 5.116,
+                "rss_mb": 7.765625,
+                "llm_requests": 2,
+                "retries": 0,
+                "max_step": 1,
+                "tool_results": 1,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Recovered from bad arguments."
+              }
+            }
+          ]
+        },
+        "parallel-tools": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Both done.",
+                  "observed": "Both done."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 2,
+                    "max": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "tool_results",
+                  "ok": true,
+                  "expected": {
+                    "min": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-11",
+                  "observed": "absent"
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-22",
+                  "observed": "absent"
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 5.086,
+                "rss_mb": 7.828125,
+                "llm_requests": 2,
+                "retries": 0,
+                "max_step": 1,
+                "tool_results": 2,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Both done."
+              }
+            }
+          ],
+          "reason": "failed: request_contains"
+        },
+        "tool-chain": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Chain complete.",
+                  "observed": "Chain complete."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 4,
+                    "max": 4
+                  },
+                  "observed": 4
+                },
+                {
+                  "name": "tool_results",
+                  "ok": true,
+                  "expected": {
+                    "min": 3
+                  },
+                  "observed": 3
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-101",
+                  "observed": "absent"
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-102",
+                  "observed": "absent"
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-103",
+                  "observed": "absent"
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 6.87,
+                "rss_mb": 7.953125,
+                "llm_requests": 4,
+                "retries": 0,
+                "max_step": 3,
+                "tool_results": 3,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200,
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Chain complete."
+              }
+            }
+          ],
+          "reason": "failed: request_contains"
+        },
+        "tool-roundtrip": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Done.",
+                  "observed": "Done."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 2,
+                    "max": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "tool_results",
+                  "ok": true,
+                  "expected": {
+                    "min": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "request_contains",
+                  "ok": false,
+                  "expected": "flores-42",
+                  "observed": "absent"
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 4.997,
+                "rss_mb": 7.64453125,
+                "llm_requests": 2,
+                "retries": 0,
+                "max_step": 1,
+                "tool_results": 1,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Done."
+              }
+            }
+          ],
+          "reason": "failed: request_contains"
+        },
+        "unknown-tool": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "zero",
+                  "observed": 0
+                },
+                {
+                  "name": "stdout_contains",
+                  "ok": true,
+                  "expected": "Recovered from unknown tool.",
+                  "observed": "Recovered from unknown tool."
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 2,
+                    "max": 2
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "tool_results",
+                  "ok": true,
+                  "expected": {
+                    "min": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 0,
+                "timed_out": false,
+                "wall_ms": 5.112,
+                "rss_mb": 7.69921875,
+                "llm_requests": 2,
+                "retries": 0,
+                "max_step": 1,
+                "tool_results": 1,
+                "truncated": 0,
+                "statuses": [
+                  200,
+                  200
+                ],
+                "trajectory_errors": [],
+                "text_tail": "Recovered from unknown tool."
+              }
+            }
+          ]
+        },
+        "auth-error-fail-fast": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "nonzero",
+                  "observed": 3
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 10000,
+                  "observed": 4
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 3,
+                "timed_out": false,
+                "wall_ms": 4.184,
+                "rss_mb": 7.578125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -816,7 +1765,7 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 5
+                  "observed": 4
                 },
                 {
                   "name": "trajectory_valid",
@@ -828,7 +1777,7 @@
               "observed": {
                 "exit_code": 3,
                 "timed_out": false,
-                "wall_ms": 4.768,
+                "wall_ms": 4.277,
                 "rss_mb": 7.578125,
                 "llm_requests": 1,
                 "retries": 0,
@@ -844,6 +1793,64 @@
             }
           ],
           "reason": "failed: exit, llm_requests, retries, stdout_contains"
+        },
+        "retry-after-too-long": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "nonzero",
+                  "observed": 3
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 5000,
+                  "observed": 4
+                },
+                {
+                  "name": "trajectory_valid",
+                  "ok": true,
+                  "expected": "valid trajectory/v0",
+                  "observed": []
+                }
+              ],
+              "observed": {
+                "exit_code": 3,
+                "timed_out": false,
+                "wall_ms": 4.111,
+                "rss_mb": 7.578125,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429
+                ],
+                "trajectory_errors": [],
+                "text_tail": ""
+              }
+            }
+          ]
         },
         "server-error-recover": {
           "status": "fail",
@@ -881,7 +1888,7 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 5
+                  "observed": 4
                 },
                 {
                   "name": "trajectory_valid",
@@ -893,8 +1900,8 @@
               "observed": {
                 "exit_code": 3,
                 "timed_out": false,
-                "wall_ms": 4.565,
-                "rss_mb": 7.453125,
+                "wall_ms": 4.457,
+                "rss_mb": 7.578125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -937,7 +1944,7 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 29
+                  "observed": 34
                 },
                 {
                   "name": "trajectory_valid",
@@ -949,8 +1956,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 29.16,
-                "rss_mb": 15.28515625,
+                "wall_ms": 33.531,
+                "rss_mb": 14.98828125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1007,8 +2014,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 8012.445,
-                "rss_mb": 7.703125,
+                "wall_ms": 8010.751,
+                "rss_mb": 7.578125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1058,7 +2065,7 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 5
+                  "observed": 4
                 },
                 {
                   "name": "trajectory_valid",
@@ -1070,8 +2077,8 @@
               "observed": {
                 "exit_code": 3,
                 "timed_out": false,
-                "wall_ms": 4.612,
-                "rss_mb": 7.578125,
+                "wall_ms": 4.44,
+                "rss_mb": 7.703125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1116,8 +2123,8 @@
               "observed": {
                 "exit_code": 4,
                 "timed_out": false,
-                "wall_ms": 10.288,
-                "rss_mb": 8.328125,
+                "wall_ms": 8.047,
+                "rss_mb": 8.203125,
                 "llm_requests": 8,
                 "retries": 0,
                 "max_step": 7,
@@ -1152,8 +2159,8 @@
       "skipped_reason": null,
       "metrics": {
         "passed": 12,
-        "applicable": 13,
-        "total": 13
+        "applicable": 14,
+        "total": 14
       },
       "info": {},
       "scenarios": {
@@ -1193,8 +2200,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 392.436,
-                "rss_mb": 110.68359375,
+                "wall_ms": 374.176,
+                "rss_mb": 111.45703125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1253,8 +2260,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 461.226,
-                "rss_mb": 115.5859375,
+                "wall_ms": 440.982,
+                "rss_mb": 113.94921875,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -1326,8 +2333,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 473.063,
-                "rss_mb": 115.10546875,
+                "wall_ms": 445.415,
+                "rss_mb": 114.4375,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -1405,8 +2412,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 479.602,
-                "rss_mb": 134.1328125,
+                "wall_ms": 447.787,
+                "rss_mb": 131.76171875,
                 "llm_requests": 4,
                 "retries": 0,
                 "max_step": 3,
@@ -1474,8 +2481,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 475.895,
-                "rss_mb": 113.98828125,
+                "wall_ms": 435.614,
+                "rss_mb": 114.0703125,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -1535,8 +2542,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 449.206,
-                "rss_mb": 117.3359375,
+                "wall_ms": 421.084,
+                "rss_mb": 115.92578125,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -1582,14 +2589,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 10000,
-                  "observed": 383
+                  "observed": 379
                 }
               ],
               "observed": {
                 "exit_code": 1,
                 "timed_out": false,
-                "wall_ms": 382.866,
-                "rss_mb": 110.5625,
+                "wall_ms": 379.217,
+                "rss_mb": 110.75,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1649,14 +2656,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 6460
+                  "observed": 6433
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 6459.914,
-                "rss_mb": 121.1015625,
+                "wall_ms": 6432.513,
+                "rss_mb": 121.48046875,
                 "llm_requests": 3,
                 "retries": 2,
                 "max_step": 0,
@@ -1672,6 +2679,62 @@
               }
             }
           ]
+        },
+        "retry-after-too-long": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "nonzero",
+                  "observed": 1
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": false,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 4
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": false,
+                  "expected": 5000,
+                  "observed": 14395
+                }
+              ],
+              "observed": {
+                "exit_code": 1,
+                "timed_out": false,
+                "wall_ms": 14395.453,
+                "rss_mb": 128.66015625,
+                "llm_requests": 4,
+                "retries": 3,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429,
+                  429,
+                  429,
+                  429
+                ],
+                "trajectory_errors": null,
+                "text_tail": ""
+              }
+            }
+          ],
+          "reason": "failed: llm_requests, max_wall_ms"
         },
         "server-error-recover": {
           "status": "pass",
@@ -1709,14 +2772,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 2428
+                  "observed": 2414
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 2428.402,
-                "rss_mb": 119.64453125,
+                "wall_ms": 2413.953,
+                "rss_mb": 117.92578125,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -1759,14 +2822,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 550
+                  "observed": 552
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 549.735,
-                "rss_mb": 168.41015625,
+                "wall_ms": 552.287,
+                "rss_mb": 165.83203125,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -1818,8 +2881,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 8383.049,
-                "rss_mb": 113.60546875,
+                "wall_ms": 8368.702,
+                "rss_mb": 109.28515625,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -1869,14 +2932,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 2437
+                  "observed": 2441
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 2436.575,
-                "rss_mb": 120.06640625,
+                "wall_ms": 2440.653,
+                "rss_mb": 115.11328125,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -1909,20 +2972,55 @@
                   "expected": {
                     "max": 50
                   },
-                  "observed": 1931
+                  "observed": 1966
                 }
               ],
               "observed": {
                 "exit_code": -9,
                 "timed_out": true,
-                "wall_ms": 45080.301,
-                "rss_mb": 445.0625,
-                "llm_requests": 1931,
+                "wall_ms": 45055.687,
+                "rss_mb": 427.1328125,
+                "llm_requests": 1966,
                 "retries": 0,
-                "max_step": 1930,
-                "tool_results": 1930,
+                "max_step": 1965,
+                "tool_results": 1965,
                 "truncated": 0,
                 "statuses": [
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
                   200,
                   200,
                   200,
@@ -3874,9 +4972,9 @@
       "model": "claude-sonnet-5-5",
       "skipped_reason": null,
       "metrics": {
-        "passed": 11,
-        "applicable": 13,
-        "total": 13
+        "passed": 12,
+        "applicable": 14,
+        "total": 14
       },
       "info": {},
       "scenarios": {
@@ -3916,8 +5014,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 419.276,
-                "rss_mb": 198.38671875,
+                "wall_ms": 400.319,
+                "rss_mb": 198.17578125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -3976,8 +5074,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 423.976,
-                "rss_mb": 202.13671875,
+                "wall_ms": 413.401,
+                "rss_mb": 202.4453125,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -4049,8 +5147,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 746.276,
-                "rss_mb": 211.34765625,
+                "wall_ms": 702.37,
+                "rss_mb": 210.9921875,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -4128,8 +5226,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 827.013,
-                "rss_mb": 215.69140625,
+                "wall_ms": 791.716,
+                "rss_mb": 216.56640625,
                 "llm_requests": 4,
                 "retries": 0,
                 "max_step": 3,
@@ -4197,8 +5295,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 725.056,
-                "rss_mb": 209.27734375,
+                "wall_ms": 682.542,
+                "rss_mb": 210.1875,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -4258,8 +5356,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 434.776,
-                "rss_mb": 202.1171875,
+                "wall_ms": 412.115,
+                "rss_mb": 201.97265625,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -4299,14 +5397,14 @@
                   "name": "max_wall_ms",
                   "ok": false,
                   "expected": 10000,
-                  "observed": 60058
+                  "observed": 60059
                 }
               ],
               "observed": {
                 "exit_code": -9,
                 "timed_out": true,
-                "wall_ms": 60058.008,
-                "rss_mb": 196.9609375,
+                "wall_ms": 60059.345,
+                "rss_mb": 197.13671875,
                 "llm_requests": 7,
                 "retries": 6,
                 "max_step": 0,
@@ -4373,14 +5471,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 2543
+                  "observed": 2651
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 2543.467,
-                "rss_mb": 195.703125,
+                "wall_ms": 2650.962,
+                "rss_mb": 195.72265625,
                 "llm_requests": 3,
                 "retries": 2,
                 "max_step": 0,
@@ -4393,6 +5491,58 @@
                 ],
                 "trajectory_errors": null,
                 "text_tail": "Recovered after rate limit.\n"
+              }
+            }
+          ]
+        },
+        "retry-after-too-long": {
+          "status": "pass",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": true,
+                  "expected": "exits before timeout",
+                  "observed": "ok"
+                },
+                {
+                  "name": "exit",
+                  "ok": true,
+                  "expected": "nonzero",
+                  "observed": 1
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": true,
+                  "expected": 5000,
+                  "observed": 394
+                }
+              ],
+              "observed": {
+                "exit_code": 1,
+                "timed_out": false,
+                "wall_ms": 393.78,
+                "rss_mb": 201.2109375,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429
+                ],
+                "trajectory_errors": null,
+                "text_tail": "API Error: Request rejected (429) \u00b7 mock transient error (attempt 1 of 1000 failing)\n"
               }
             }
           ]
@@ -4433,14 +5583,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 1022
+                  "observed": 960
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 1022.134,
-                "rss_mb": 202.03515625,
+                "wall_ms": 960.413,
+                "rss_mb": 202.43359375,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -4483,14 +5633,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 473
+                  "observed": 445
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 472.879,
-                "rss_mb": 242.83984375,
+                "wall_ms": 444.565,
+                "rss_mb": 241.6640625,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -4541,8 +5691,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 8434.022,
-                "rss_mb": 192.14453125,
+                "wall_ms": 8389.653,
+                "rss_mb": 192.0703125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -4592,14 +5742,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 1031
+                  "observed": 960
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 1030.565,
-                "rss_mb": 201.45703125,
+                "wall_ms": 959.649,
+                "rss_mb": 200.265625,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -4632,20 +5782,98 @@
                   "expected": {
                     "max": 50
                   },
-                  "observed": 1363
+                  "observed": 1441
                 }
               ],
               "observed": {
                 "exit_code": -9,
                 "timed_out": true,
-                "wall_ms": 45071.944,
-                "rss_mb": 373.2578125,
-                "llm_requests": 1363,
+                "wall_ms": 45046.857,
+                "rss_mb": 369.41796875,
+                "llm_requests": 1441,
                 "retries": 0,
-                "max_step": 1362,
-                "tool_results": 1362,
+                "max_step": 1440,
+                "tool_results": 1440,
                 "truncated": 0,
                 "statuses": [
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
                   200,
                   200,
                   200,
@@ -6030,8 +7258,8 @@
       "skipped_reason": null,
       "metrics": {
         "passed": 7,
-        "applicable": 9,
-        "total": 13
+        "applicable": 10,
+        "total": 14
       },
       "info": {},
       "scenarios": {
@@ -6071,8 +7299,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 472.876,
-                "rss_mb": 154.21875,
+                "wall_ms": 1370.451,
+                "rss_mb": 154.13671875,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -6147,8 +7375,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 468.11,
-                "rss_mb": 154.75,
+                "wall_ms": 704.583,
+                "rss_mb": 155.3671875,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -6194,14 +7422,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 10000,
-                  "observed": 6412
+                  "observed": 6843
                 }
               ],
               "observed": {
                 "exit_code": 1,
                 "timed_out": false,
-                "wall_ms": 6411.871,
-                "rss_mb": 149.6953125,
+                "wall_ms": 6843.266,
+                "rss_mb": 149.8828125,
                 "llm_requests": 6,
                 "retries": 5,
                 "max_step": 0,
@@ -6267,14 +7495,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 2451
+                  "observed": 2769
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 2451.102,
-                "rss_mb": 153.48046875,
+                "wall_ms": 2768.543,
+                "rss_mb": 153.40234375,
                 "llm_requests": 3,
                 "retries": 2,
                 "max_step": 0,
@@ -6290,6 +7518,53 @@
               }
             }
           ]
+        },
+        "retry-after-too-long": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": false,
+                  "expected": "exits before timeout",
+                  "observed": "timeout"
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": true,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 1
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": false,
+                  "expected": 5000,
+                  "observed": 45010
+                }
+              ],
+              "observed": {
+                "exit_code": -9,
+                "timed_out": true,
+                "wall_ms": 45010.426,
+                "rss_mb": 50.484375,
+                "llm_requests": 1,
+                "retries": 0,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429
+                ],
+                "trajectory_errors": null,
+                "text_tail": ""
+              }
+            }
+          ],
+          "reason": "failed: completes, max_wall_ms"
         },
         "server-error-recover": {
           "status": "pass",
@@ -6327,14 +7602,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 700
+                  "observed": 673
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 700.309,
-                "rss_mb": 153.05078125,
+                "wall_ms": 673.315,
+                "rss_mb": 154.13671875,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -6377,14 +7652,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 540
+                  "observed": 1211
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 539.596,
-                "rss_mb": 196.24609375,
+                "wall_ms": 1211.171,
+                "rss_mb": 200.296875,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -6435,8 +7710,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 8407.5,
-                "rss_mb": 153.3046875,
+                "wall_ms": 8744.837,
+                "rss_mb": 152.7578125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -6486,14 +7761,14 @@
                   "name": "max_wall_ms",
                   "ok": true,
                   "expected": 30000,
-                  "observed": 586
+                  "observed": 958
                 }
               ],
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 586.014,
-                "rss_mb": 154.75,
+                "wall_ms": 957.951,
+                "rss_mb": 154.6875,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -6526,54 +7801,20 @@
                   "expected": {
                     "max": 50
                   },
-                  "observed": 1679
+                  "observed": 1645
                 }
               ],
               "observed": {
                 "exit_code": -9,
                 "timed_out": true,
-                "wall_ms": 45046.433,
-                "rss_mb": 50.68359375,
-                "llm_requests": 1679,
+                "wall_ms": 45050.04,
+                "rss_mb": 50.328125,
+                "llm_requests": 1645,
                 "retries": 0,
-                "max_step": 1678,
-                "tool_results": 1678,
+                "max_step": 1644,
+                "tool_results": 1644,
                 "truncated": 0,
                 "statuses": [
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
-                  200,
                   200,
                   200,
                   200,
@@ -8240,8 +9481,8 @@
       "skipped_reason": null,
       "metrics": {
         "passed": 12,
-        "applicable": 13,
-        "total": 13
+        "applicable": 14,
+        "total": 14
       },
       "info": {},
       "scenarios": {
@@ -8281,8 +9522,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 19.984,
-                "rss_mb": 7.0234375,
+                "wall_ms": 18.85,
+                "rss_mb": 7.02734375,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -8341,8 +9582,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 27.205,
-                "rss_mb": 7.53125,
+                "wall_ms": 27.092,
+                "rss_mb": 7.47265625,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -8414,8 +9655,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 68.812,
-                "rss_mb": 8.46484375,
+                "wall_ms": 68.983,
+                "rss_mb": 8.37890625,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -8493,8 +9734,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 102.535,
-                "rss_mb": 8.3984375,
+                "wall_ms": 101.677,
+                "rss_mb": 8.5,
                 "llm_requests": 4,
                 "retries": 0,
                 "max_step": 3,
@@ -8562,8 +9803,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 58.516,
-                "rss_mb": 8.44921875,
+                "wall_ms": 58.928,
+                "rss_mb": 8.3359375,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -8623,8 +9864,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 27.731,
-                "rss_mb": 7.37890625,
+                "wall_ms": 26.912,
+                "rss_mb": 7.25390625,
                 "llm_requests": 2,
                 "retries": 0,
                 "max_step": 1,
@@ -8676,7 +9917,7 @@
               "observed": {
                 "exit_code": 1,
                 "timed_out": false,
-                "wall_ms": 26.597,
+                "wall_ms": 26.526,
                 "rss_mb": 7.08984375,
                 "llm_requests": 1,
                 "retries": 0,
@@ -8743,8 +9984,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 2058.92,
-                "rss_mb": 7.41015625,
+                "wall_ms": 2058.811,
+                "rss_mb": 7.40625,
                 "llm_requests": 3,
                 "retries": 2,
                 "max_step": 0,
@@ -8760,6 +10001,54 @@
               }
             }
           ]
+        },
+        "retry-after-too-long": {
+          "status": "fail",
+          "runs": [
+            {
+              "checks": [
+                {
+                  "name": "completes",
+                  "ok": false,
+                  "expected": "exits before timeout",
+                  "observed": "timeout"
+                },
+                {
+                  "name": "llm_requests",
+                  "ok": false,
+                  "expected": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "observed": 2
+                },
+                {
+                  "name": "max_wall_ms",
+                  "ok": false,
+                  "expected": 5000,
+                  "observed": 45045
+                }
+              ],
+              "observed": {
+                "exit_code": -9,
+                "timed_out": true,
+                "wall_ms": 45045.287,
+                "rss_mb": 7.09375,
+                "llm_requests": 2,
+                "retries": 1,
+                "max_step": 0,
+                "tool_results": 0,
+                "truncated": 0,
+                "statuses": [
+                  429,
+                  429
+                ],
+                "trajectory_errors": null,
+                "text_tail": ""
+              }
+            }
+          ],
+          "reason": "failed: completes, llm_requests, max_wall_ms"
         },
         "server-error-recover": {
           "status": "pass",
@@ -8803,8 +10092,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 287.446,
-                "rss_mb": 7.203125,
+                "wall_ms": 287.195,
+                "rss_mb": 7.16015625,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -8853,8 +10142,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 56.206,
-                "rss_mb": 18.20703125,
+                "wall_ms": 55.915,
+                "rss_mb": 18.30078125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -8905,8 +10194,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 8021.32,
-                "rss_mb": 7.08984375,
+                "wall_ms": 8018.54,
+                "rss_mb": 7.0078125,
                 "llm_requests": 1,
                 "retries": 0,
                 "max_step": 0,
@@ -8962,8 +10251,8 @@
               "observed": {
                 "exit_code": 0,
                 "timed_out": false,
-                "wall_ms": 277.22,
-                "rss_mb": 7.0390625,
+                "wall_ms": 276.935,
+                "rss_mb": 7.046875,
                 "llm_requests": 2,
                 "retries": 1,
                 "max_step": 0,
@@ -8996,20 +10285,39 @@
                   "expected": {
                     "max": 50
                   },
-                  "observed": 2278
+                  "observed": 2297
                 }
               ],
               "observed": {
                 "exit_code": -9,
                 "timed_out": true,
-                "wall_ms": 45028.846,
-                "rss_mb": 39.875,
-                "llm_requests": 2278,
+                "wall_ms": 45049.924,
+                "rss_mb": 39.703125,
+                "llm_requests": 2297,
                 "retries": 0,
-                "max_step": 2277,
-                "tool_results": 2277,
+                "max_step": 2296,
+                "tool_results": 2296,
                 "truncated": 0,
                 "statuses": [
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
+                  200,
                   200,
                   200,
                   200,
