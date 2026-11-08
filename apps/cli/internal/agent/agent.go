@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sfloresone/flores/apps/cli/internal/provider"
+	"github.com/sfloresone/flores/apps/cli/internal/tool"
 )
 
 // Config is fixed for the whole conversation.
@@ -17,6 +18,11 @@ type Config struct {
 	System    string
 	MaxSteps  int // per turn; 0 means no limit (ADR 0003)
 	MaxTokens int
+	// Tools the model may call; nil means none, and every call gets an
+	// "unknown tool" error the model can read (ADR 0006).
+	Tools *tool.Set
+	// Env is where the tools work.
+	Env tool.Env
 }
 
 // Agent is one conversation with a model.
@@ -76,7 +82,7 @@ func (t *turn) loop(ctx context.Context) Result {
 		if len(out.calls) == 0 {
 			return t.end(StatusSuccess, nil)
 		}
-		results := t.runTools(out.calls)
+		results := t.runTools(ctx, out)
 		if t.stopped {
 			return t.res
 		}
@@ -90,6 +96,7 @@ func (t *turn) loop(ctx context.Context) Result {
 type stepOutput struct {
 	text  string
 	calls []provider.ToolCall
+	cut   bool // the reply stopped at the output token limit
 }
 
 // step makes one model call, streams its events and appends the assistant
@@ -107,6 +114,7 @@ func (t *turn) step(ctx context.Context, choice provider.ToolChoice) (stepOutput
 		Model:      a.cfg.Model,
 		System:     a.cfg.System,
 		Messages:   a.history,
+		Tools:      a.cfg.Tools.Defs(), // the same bytes every step (prompt cache)
 		ToolChoice: choice,
 		MaxTokens:  a.cfg.MaxTokens,
 	}
@@ -190,6 +198,7 @@ func (t *turn) step(ctx context.Context, choice provider.ToolChoice) (stepOutput
 	}
 
 	out.text = text.String()
+	out.cut = done.Stop == provider.StopMaxTokens
 	stats.Duration, stats.Usage, stats.Stop, stats.Text = time.Since(start), done.Usage, done.RawStop, out.text
 	stats.HTTPStatus = 200
 	t.res.Usage.Add(done.Usage)
@@ -206,40 +215,55 @@ func (t *turn) step(ctx context.Context, choice provider.ToolChoice) (stepOutput
 	return out, nil
 }
 
-// runTools answers every tool call and appends the results to the history.
-func (t *turn) runTools(calls []provider.ToolCall) []provider.ToolResult {
-	n := t.agent.steps
-	results := make([]provider.ToolResult, 0, len(calls))
-	parts := make([]provider.Part, 0, len(calls))
-	for i := range calls {
-		call := &calls[i]
-		if !t.emit(Event{Kind: EventToolCall, Step: n, ToolCall: call}) {
-			return nil
+// runTools answers every tool call of a step and appends the results to
+// the history, in the order of the calls. Consecutive read-only calls run
+// at the same time; the rest run one by one (tool.Set.Groups).
+func (t *turn) runTools(ctx context.Context, out stepOutput) []provider.ToolResult {
+	a := t.agent
+	n := a.steps
+	results := make([]provider.ToolResult, 0, len(out.calls))
+	parts := make([]provider.Part, 0, len(out.calls))
+	for _, group := range a.cfg.Tools.Groups(out.calls) {
+		for i := range group {
+			if !t.emit(Event{Kind: EventToolCall, Step: n, ToolCall: &group[i]}) {
+				return nil
+			}
 		}
-		start := time.Now()
-		res := runTool(*call)
-		t.res.ToolCalls++
-		if res.IsError {
-			t.res.ToolErrors++
+		var done []tool.Done
+		if out.cut {
+			done = cutOff(group)
+		} else {
+			done = a.cfg.Tools.RunGroup(ctx, a.cfg.Env, group)
 		}
-		results = append(results, res)
-		parts = append(parts, res)
-		if !t.emit(Event{Kind: EventToolResult, Step: n, ToolResult: &res, ToolDuration: time.Since(start)}) {
-			return nil
+		for _, d := range done {
+			res := d.Result
+			t.res.ToolCalls++
+			if res.IsError {
+				t.res.ToolErrors++
+			}
+			results = append(results, res)
+			parts = append(parts, res)
+			if !t.emit(Event{Kind: EventToolResult, Step: n, ToolResult: &res, ToolDuration: d.Duration}) {
+				return nil
+			}
 		}
 	}
-	t.agent.history = append(t.agent.history, provider.Message{Role: provider.RoleUser, Parts: parts})
+	a.history = append(a.history, provider.Message{Role: provider.RoleUser, Parts: parts})
 	return results
 }
 
-// runTool executes one tool. M0 has no tools: every call gets an error the
-// model can read, the same answer flores-stub gives. M2 adds the registry.
-func runTool(call provider.ToolCall) provider.ToolResult {
-	return provider.ToolResult{
-		CallID:  call.ID,
-		Content: fmt.Sprintf("error: unknown tool %q (no tool with that name is available)", call.Name),
-		IsError: true,
+// cutOff answers the calls of a reply that stopped at the output token
+// limit. Their arguments may be incomplete, so none of them runs.
+func cutOff(group []provider.ToolCall) []tool.Done {
+	done := make([]tool.Done, len(group))
+	for i, c := range group {
+		done[i].Result = provider.ToolResult{
+			CallID: c.ID, IsError: true,
+			Content: "not run: your reply stopped at the output token limit, so the arguments of this call " +
+				"may be incomplete; issue the call again with complete arguments",
+		}
 	}
+	return done
 }
 
 // summarize runs the extra step after a brake fires (ADR 0003): the model is

@@ -37,7 +37,7 @@ class Flores(Adapter):
         )
 
     def shell_call(self, command: str) -> tuple[str, dict]:
-        # M0 has no tools yet; this is the name its shell tool will use (M2).
+        # The real bash tool since M2 (ADR 0006).
         return "bash", {"command": command}
 
 
