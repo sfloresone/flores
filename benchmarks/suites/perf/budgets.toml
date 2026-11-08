@@ -17,7 +17,10 @@
 [perf-hello.flores]
 "wall_ms.p50" = 50.0
 "rss_mb.p50" = 15.0
-"request_bytes.p50" = 4096
+# M2 (ADR 0006): the six tool definitions are most of the request. Measured
+# 4326 B on macOS (Pi with 4 tools: 5.9 KiB); the margin covers longer
+# working-directory paths, not longer descriptions.
+"request_bytes.p50" = 5120
 
 # flores-openai is the same binary speaking Chat Completions: same limits.
 [perf-startup.flores-openai]
@@ -27,7 +30,7 @@
 [perf-hello.flores-openai]
 "wall_ms.p50" = 50.0
 "rss_mb.p50" = 15.0
-"request_bytes.p50" = 4096
+"request_bytes.p50" = 5120  # measured 4510 B: each tool is wrapped in {"type":"function",...}
 
 [perf-startup.flores-stub]
 "wall_ms.p50" = 5.0
@@ -45,13 +48,14 @@
 [harness.flores]
 # runaway-tool-loop passes with no step limit thanks to repetition detection
 # (ADR 0003); the *-recover scenarios and retry-after-too-long thanks to
-# retries (ADR 0004); out-of-credit-fail-fast thanks to ErrQuota (ADR 0005).
-# M2 adds the tool scenarios.
+# retries (ADR 0004); out-of-credit-fail-fast thanks to ErrQuota (ADR 0005);
+# the tool scenarios thanks to real tools (ADR 0006). All 15.
 must_pass = [
   "basic-text", "unknown-tool", "auth-error-fail-fast", "runaway-tool-loop",
   "malformed-tool-args", "huge-output", "slow-first-token",
   "rate-limit-recover", "server-error-recover", "stream-truncated-recover",
   "retry-after-too-long", "out-of-credit-fail-fast",
+  "tool-roundtrip", "tool-chain", "parallel-tools",
 ]
 
 # Same binary, other protocol (ADR 0005): the same list, so neither adapter
@@ -62,6 +66,7 @@ must_pass = [
   "malformed-tool-args", "huge-output", "slow-first-token",
   "rate-limit-recover", "server-error-recover", "stream-truncated-recover",
   "retry-after-too-long", "out-of-credit-fail-fast",
+  "tool-roundtrip", "tool-chain", "parallel-tools",
 ]
 
 [harness.flores-stub]
