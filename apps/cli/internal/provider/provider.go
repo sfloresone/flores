@@ -135,7 +135,12 @@ const (
 	StopOther                           // anything else (refusal, stop sequence…)
 )
 
-// Usage is the token count of one model call.
+// Usage is the token count of one model call. InputTokens counts only the
+// input that was not served from the prompt cache; cached input is in
+// CacheReadTokens (and CacheWriteTokens for what was written to the cache).
+// That is how the Messages API reports it; adapters for APIs that include
+// cached tokens in the input total (Chat Completions) subtract them, so cost
+// is computed the same way for every provider (ADR 0005).
 type Usage struct {
 	InputTokens      int `json:"input_tokens"`
 	OutputTokens     int `json:"output_tokens"`
