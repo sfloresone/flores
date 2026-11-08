@@ -19,6 +19,7 @@ type reply struct {
 	text  string
 	calls []provider.ToolCall
 	err   error
+	stop  provider.StopReason
 }
 
 // fake is a provider that answers from a script; after the script ends it
@@ -58,7 +59,7 @@ func (f *fake) Stream(ctx context.Context, req provider.Request) iter.Seq2[provi
 				return
 			}
 		}
-		yield(provider.Event{Kind: provider.EventDone, Usage: provider.Usage{InputTokens: 10, OutputTokens: 2}, RawStop: "end_turn"}, nil)
+		yield(provider.Event{Kind: provider.EventDone, Usage: provider.Usage{InputTokens: 10, OutputTokens: 2}, Stop: r.stop, RawStop: "end_turn"}, nil)
 	}
 }
 

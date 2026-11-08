@@ -10,7 +10,11 @@
 // repetition detector. When one fires, the agent makes one extra step
 // without tools that asks the model to summarize where the work stands.
 //
+// Tools come from Config.Tools (package tool, ADR 0006). The calls of one
+// step are answered in their order; consecutive read-only calls run at the
+// same time. Calls from a reply cut at the output token limit are not run.
+//
 // What this package must NOT do: speak a wire protocol (that is provider/),
-// format output (that is cmd/flores and trajectory/), or retry failed calls
-// (that will be a provider decorator, ADR 0002).
+// format output (that is cmd/flores and trajectory/), retry failed calls
+// (that is provider.WithRetry, ADR 0004), or implement a tool (tool/).
 package agent

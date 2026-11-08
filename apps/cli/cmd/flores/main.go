@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -25,14 +26,24 @@ import (
 	"github.com/sfloresone/flores/apps/cli/internal/provider"
 	"github.com/sfloresone/flores/apps/cli/internal/provider/anthropic"
 	"github.com/sfloresone/flores/apps/cli/internal/provider/openai"
+	"github.com/sfloresone/flores/apps/cli/internal/tool"
 	"github.com/sfloresone/flores/apps/cli/internal/trajectory"
 )
 
 // version is overridden at release time with -ldflags "-X main.version=…".
 var version = "0.0.0-dev"
 
-// systemPrompt is deliberately tiny: every byte is sent on every step.
-const systemPrompt = "You are flores, a coding agent. Be concise."
+// basePrompt is deliberately tiny: every byte is sent on every step.
+const basePrompt = "You are flores, a coding agent. Be concise."
+
+// systemPrompt adds what the tools need to know: paths are relative to the
+// working directory, and commands depend on the OS.
+func systemPrompt(cwd string, tools bool) string {
+	if !tools {
+		return basePrompt
+	}
+	return basePrompt + "\nWorking directory: " + cwd + "\nOS: " + runtime.GOOS
+}
 
 // Exit codes (ADR 0003). The benchmark contract relies on them.
 const (
@@ -64,6 +75,9 @@ Flags:
   --max-retries N       resend a call that failed transiently up to N times;
                         0 = never (default 6, env FLORES_MAX_RETRIES)
   --timeout DUR         overall timeout, e.g. 10m; 0 = none (default 0)
+  --no-tools            give the model no tools. By default it has bash, read,
+                        edit, write, grep and glob in the current directory,
+                        and they run without asking for permission
 
 Exit codes: 0 success, 2 usage, 3 provider error or timeout,
             4 stopped by a brake (step limit or repeated tool call), 130 cancelled.
@@ -77,7 +91,7 @@ type options struct {
 	prompt, output, model, baseURL, apiKey, providerName string
 	maxSteps, maxRetries                                 int
 	timeout                                              time.Duration
-	version                                              bool
+	version, noTools                                     bool
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -107,11 +121,21 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	policy.MaxRetries = opts.maxRetries
 	vendor := providers[opts.providerName]
 	p := provider.WithRetry(vendor.new(opts), policy)
-	a := agent.New(p, agent.Config{Model: opts.model, System: systemPrompt, MaxSteps: opts.maxSteps})
+	cwd, _ := os.Getwd()
+	cfg := agent.Config{Model: opts.model, System: systemPrompt(cwd, !opts.noTools), MaxSteps: opts.maxSteps}
+	if !opts.noTools {
+		// Full bash outputs too long to send are saved here. os.Remove only
+		// removes an empty directory, so saved outputs outlive the run.
+		tmp, err := os.MkdirTemp("", "flores-")
+		if err == nil {
+			defer os.Remove(tmp)
+		}
+		cfg.Tools, cfg.Env = tool.Defaults(), tool.Env{Dir: cwd, TempDir: tmp}
+	}
+	a := agent.New(p, cfg)
 
 	var res *agent.Result
 	if opts.output == "jsonl" {
-		cwd, _ := os.Getwd()
 		em := trajectory.New(stdout, trajectory.Session{
 			AgentName: "flores", AgentVersion: version, Model: opts.model,
 			ProviderName: opts.providerName, Protocol: vendor.protocol,
@@ -181,6 +205,7 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 	}
 	fs.IntVar(&o.maxRetries, "max-retries", defaultRetries, "")
 	fs.DurationVar(&o.timeout, "timeout", 0, "")
+	fs.BoolVar(&o.noTools, "no-tools", false, "")
 	fs.BoolVar(&o.version, "version", false, "")
 	fs.BoolVar(&o.version, "v", false, "")
 	help := fs.Bool("help", false, "")

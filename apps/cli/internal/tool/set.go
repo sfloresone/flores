@@ -33,6 +33,11 @@ func New(tools ...Tool) *Set {
 	return s
 }
 
+// Defaults is flores' tool set (ADR 0006).
+func Defaults() *Set {
+	return New(Bash(), Read(), Edit(), Write(), Grep(), Glob())
+}
+
 // Defs describes the tools to the model, sorted by name so the request
 // bytes never change between steps (prompt caching). A nil set has none.
 func (s *Set) Defs() []provider.ToolDef {
