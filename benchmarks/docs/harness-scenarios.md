@@ -61,6 +61,12 @@ solo aparece si el comando se ejecutó de verdad y su salida volvió al modelo.
 
 **Se espera:** sale con error; termina antes del timeout; peticiones = 1; ≤ 10 s. <sub>timeout 60 s</sub>
 
+### `out-of-credit-fail-fast`: Sin saldo: fallar rápido y sin reintentos
+
+**Por qué:** Sin crédito, reintentar no arregla nada. OpenAI lo responde con un 429, el mismo código que «demasiadas peticiones», así que un agente que mira solo el código HTTP espera y reintenta para nada. Solo el cuerpo (code: insufficient_quota) lo distingue. En Anthropic llega como un 400 «credit balance is too low».
+
+**Se espera:** sale con error; termina antes del timeout; peticiones = 1; ≤ 5 s. <sub>timeout 60 s</sub>
+
 ### `rate-limit-recover`: 429 transitorio: reintentar respetando Retry-After
 
 **Por qué:** Los proveedores devuelven 429 con frecuencia. El agente debe reintentar (respetando Retry-After) y terminar la tarea, sin mostrar el error al usuario.

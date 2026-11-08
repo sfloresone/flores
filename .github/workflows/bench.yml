@@ -54,8 +54,8 @@ jobs:
         run: uv run pytest -q
       - name: Scenario docs are up to date
         run: uv run flores-bench scenarios --write-docs && git diff --exit-code -- docs/harness-scenarios.md
-      - name: Layer B gate (flores and flores-stub, deterministic)
-        run: uv run flores-bench harness --agents flores,flores-stub --enforce --out results/harness-gate.json
+      - name: Layer B gate (flores on both protocols and flores-stub, deterministic)
+        run: uv run flores-bench harness --agents flores,flores-openai,flores-stub --enforce --out results/harness-gate.json
 
   perf:
     name: Perf (linux reference)

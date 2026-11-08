@@ -41,6 +41,23 @@ class Flores(Adapter):
         return "bash", {"command": command}
 
 
+class FloresOpenAI(Flores):
+    """The same flores binary speaking Chat Completions (M1b, ADR 0005).
+
+    Both protocols are measured so one adapter can never silently fall
+    behind the other.
+    """
+
+    name = "flores-openai"
+    label = "flores (OpenAI)"
+
+    def invoke(self, ctx: RunContext) -> Invocation:
+        inv = super().invoke(ctx)
+        # Chat Completions base URLs include the version, like Pi's openai one.
+        inv.env.update({"FLORES_PROVIDER": "openai", "FLORES_BASE_URL": f"{ctx.mock_url}/v1"})
+        return inv
+
+
 class FloresStub(Adapter):
     name = "flores-stub"
     label = "flores-stub"
@@ -204,4 +221,6 @@ class Fx(Adapter):
         return "shell", {"action": "run", "command": command}
 
 
-ADAPTERS: dict[str, Adapter] = {a.name: a for a in (Flores(), FloresStub(), Pi(), ClaudeCode(), Codex(), Fx())}
+ADAPTERS: dict[str, Adapter] = {
+    a.name: a for a in (Flores(), FloresOpenAI(), FloresStub(), Pi(), ClaudeCode(), Codex(), Fx())
+}

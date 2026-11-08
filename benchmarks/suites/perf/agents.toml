@@ -10,8 +10,12 @@
 # CI installs exactly these versions.
 
 [agents.flores]
-# The real agent, built from apps/cli. Speaks the Anthropic Messages API (M0).
+# The real agent, built from apps/cli, speaking the Anthropic Messages API.
 model = "claude-sonnet-5-5"
+
+[agents.flores-openai]
+# The same binary speaking OpenAI Chat Completions (--provider openai).
+model = "gpt-6.1-sol"
 
 [agents.flores-stub]
 model = "gpt-6.1-sol"

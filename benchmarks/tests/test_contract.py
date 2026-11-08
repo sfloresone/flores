@@ -236,3 +236,67 @@ def test_flores_gives_up_when_retry_after_is_too_long(tmp_path):
         events = events_of(res.stdout)
         assert trajectory.validate(events) == []
         assert len(mock.requests()) == 1
+
+
+# ------------------------------------------------- flores --provider openai
+
+
+def run_flores_openai(mock: MockProvider, *args: str) -> subprocess.CompletedProcess:
+    env = {"PATH": os.environ.get("PATH", ""), "FLORES_API_KEY": "mock", "FLORES_MODEL": "gpt-test"}
+    return subprocess.run(
+        [str(FLORES_BIN), "--provider", "openai", "--output", "jsonl", "--base-url", f"{mock.url}/v1", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+
+
+def scenario_for(subject: str, name: str, tmp_path) -> object:
+    sc = Scenario.from_dict(json.loads((HARNESS_DIR / f"{name}.json").read_text()))
+    out = tmp_path / f"{subject}-{name}.json"
+    out.write_text(json.dumps(render_mock(sc, ADAPTERS[subject])))
+    return out
+
+
+def test_flores_openai_hello_trajectory_is_valid():
+    with MockProvider() as mock:
+        res = run_flores_openai(mock, "-p", "hello world")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert events[0]["provider"] == {"name": "openai", "protocol": "openai-chat", "base_url": f"{mock.url}/v1"}
+        s = trajectory.summarize(events)
+        assert s["status"] == "success" and s["steps"] == 1
+        assert s["usage"]["output_tokens"] > 0
+        (rec,) = mock.requests()
+        req = next(e for e in events if e["type"] == "llm.request")
+        assert rec["protocol"] == "openai-chat"
+        assert rec["request_bytes"] == req["request_bytes"]
+
+
+def test_flores_openai_retries_a_cut_stream(tmp_path):
+    with MockProvider(scenario=scenario_for("flores-openai", "stream-truncated-recover", tmp_path)) as mock:
+        res = run_flores_openai(mock, "-p", "Say something.")
+        assert res.returncode == 0, res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        assert _requests_by_attempt(events) == [1, 2]
+        assert events[-1]["final_text"] == "The quick brown fox jumps over the lazy dog."
+        assert [r["step"] for r in mock.requests()] == [0, 0]
+
+
+@pytest.mark.parametrize("subject", ["flores", "flores-openai"])
+def test_flores_out_of_credit_fails_at_once(subject, tmp_path):
+    run = run_flores if subject == "flores" else run_flores_openai
+    with MockProvider(scenario=scenario_for(subject, "out-of-credit-fail-fast", tmp_path)) as mock:
+        res = run(mock, "-p", "Say something.")
+        assert res.returncode == 3
+        assert "no credit" in res.stderr and "retrying" not in res.stderr
+        events = events_of(res.stdout)
+        assert trajectory.validate(events) == []
+        err = next(e for e in events if e["type"] == "error")
+        assert err["retryable"] is False
+        (rec,) = mock.requests()
+        # Each vendor's real shape: OpenAI says 429, Anthropic says 400.
+        assert rec["status"] == (400 if subject == "flores" else 429)

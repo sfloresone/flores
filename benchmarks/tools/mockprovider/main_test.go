@@ -376,6 +376,51 @@ func TestAdditionalToolsAndToolResultsCounted(t *testing.T) {
 	}
 }
 
+func TestErrorCodeAndPerVendorShape(t *testing.T) {
+	sc := &Scenario{Name: "credit", Steps: []Step{{Error: &StepError{
+		Status: 429, Type: "insufficient_quota", Code: "insufficient_quota", Message: "no quota",
+		Anthropic: &StepError{Status: 400, Type: "invalid_request_error", Message: "Your credit balance is too low"},
+	}}}}
+	if err := sc.validate(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newServer(sc, nil))
+	defer srv.Close()
+
+	resp := post(t, srv, "/v1/chat/completions", `{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
+	if resp.StatusCode != 429 || !strings.Contains(string(mustRead(t, resp)), `"code":"insufficient_quota"`) {
+		t.Errorf("openai shape: %d", resp.StatusCode)
+	}
+	resp = post(t, srv, "/v1/messages", `{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
+	if body := string(mustRead(t, resp)); resp.StatusCode != 400 || !strings.Contains(body, "credit balance") {
+		t.Errorf("anthropic shape: %d %s", resp.StatusCode, body)
+	}
+}
+
+func TestOpenAIUsageIncludesCachedInput(t *testing.T) {
+	sc := &Scenario{Name: "cache", Steps: []Step{{Text: "hi", Usage: &Usage{InputTokens: 10, OutputTokens: 2, CacheReadTokens: 30}}}}
+	if err := sc.validate(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newServer(sc, nil))
+	defer srv.Close()
+	resp := post(t, srv, "/v1/chat/completions", `{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
+	var body struct {
+		Usage struct {
+			PromptTokens int `json:"prompt_tokens"`
+			Details      struct {
+				Cached int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(mustRead(t, resp), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Usage.PromptTokens != 40 || body.Usage.Details.Cached != 30 {
+		t.Errorf("usage %+v", body.Usage)
+	}
+}
+
 func mustRead(t *testing.T, resp *http.Response) []byte {
 	t.Helper()
 	b, err := io.ReadAll(resp.Body)

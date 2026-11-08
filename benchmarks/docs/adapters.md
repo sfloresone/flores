@@ -102,6 +102,13 @@ Resultados completos en [`published/README.md`](../published/README.md). Lo más
 
   Medido en local (macOS); los datos de referencia los publica la CI de Linux.
   Detalle en el [ADR 0004](../../docs/adr/0004-reintentos.md).
+- **Sin saldo, fx sigue reintentando.** En `out-of-credit-fail-fast`, OpenAI
+  responde un 429 `insufficient_quota`, el mismo código que el de límite de
+  peticiones; en Anthropic llega como un 400 "credit balance is too low".
+  - Pi, Claude Code, Codex y flores (con los dos protocolos) fallan a la primera.
+  - fx hace 7 peticiones en 60 s, hasta que el runner lo mata.
+
+  Medido en local (macOS). Detalle en el [ADR 0005](../../docs/adr/0005-adaptador-openai.md).
 - **401 no siempre falla rápido.** Pi y fx abandonan a la primera. Codex hace 6
   intentos (≈6 s) y Claude Code sigue reintentando con backoff durante más de
   60 s. Una clave inválida no se arregla reintentando.

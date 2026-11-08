@@ -55,6 +55,14 @@ Esquema formal: [`schema/trajectory.v1.schema.json`](../schema/trajectory.v1.sch
 | `session.end` | `status` (`success`/`error`/`max_steps`/`repetition`/`cancelled`), `steps`, `duration_ms`, `usage`, `tool_calls`, `tool_errors` (+ `final_text`) | último evento, una sola vez |
 
 `usage` = `{input_tokens, output_tokens, cache_read_tokens?, cache_write_tokens?}`.
+`input_tokens` es solo el input que **no** salió de la caché, como lo cuenta la
+Messages API. Con Chat Completions, `prompt_tokens` incluye los cacheados, así
+que flores los resta. El input total es
+`input_tokens + cache_read_tokens + cache_write_tokens`
+([ADR 0005](../../docs/adr/0005-adaptador-openai.md)).
+
+`provider.protocol` es `anthropic-messages` u `openai-chat`, el mismo nombre que
+usa el mock en sus registros.
 
 Cuando para un freno (`max_steps` o `repetition`), `flores` hace **un paso más**
 sin tools en el que avisa al modelo del motivo y le pide un resumen de lo hecho y
