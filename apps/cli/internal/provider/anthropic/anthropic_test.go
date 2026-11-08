@@ -273,3 +273,16 @@ func TestCancelledContextIsNotAProviderError(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestNoCreditIsAQuotaError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}`)
+	}))
+	defer srv.Close()
+	_, err := collect(t, New(Config{BaseURL: srv.URL}), hello())
+	var pe *provider.Error
+	if !errors.As(err, &pe) || pe.Kind != provider.ErrQuota || pe.Retryable() {
+		t.Fatalf("got %#v", err)
+	}
+}

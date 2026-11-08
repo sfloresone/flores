@@ -55,6 +55,9 @@ func flores(t *testing.T, args ...string) (code int, stdout, stderr string) {
 }
 
 func TestVersionAndUsage(t *testing.T) {
+	for _, k := range []string{"FLORES_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FLORES_PROVIDER"} {
+		t.Setenv(k, "")
+	}
 	if code, out, _ := flores(t, "--version"); code != exitOK || !strings.HasPrefix(out, "flores ") {
 		t.Fatalf("--version: %d %q", code, out)
 	}
@@ -63,6 +66,85 @@ func TestVersionAndUsage(t *testing.T) {
 	}
 	if code, _, errOut := flores(t, "-p", "hi", "--model", "m"); code != exitUsage || !strings.Contains(errOut, "API key") {
 		t.Fatalf("missing key: %d %q", code, errOut)
+	}
+	if code, _, errOut := flores(t, "-p", "hi", "--model", "m", "--provider", "gemini"); code != exitUsage || !strings.Contains(errOut, "unknown provider") {
+		t.Fatalf("unknown provider: %d %q", code, errOut)
+	}
+}
+
+func TestKeyIsTheChosenProvidersOwn(t *testing.T) {
+	t.Setenv("FLORES_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant")
+	t.Setenv("OPENAI_API_KEY", "")
+	// An Anthropic key must never be sent to OpenAI.
+	if code, _, errOut := flores(t, "-p", "hi", "--model", "m", "--provider", "openai"); code != exitUsage || !strings.Contains(errOut, "OPENAI_API_KEY") {
+		t.Fatalf("exit %d, stderr %q", code, errOut)
+	}
+}
+
+// fakeOpenAI fails the first `fail` requests with the given status and body,
+// then streams a Chat Completions text answer. It counts the requests.
+func fakeOpenAI(t *testing.T, fail int32, status int, body string) (string, *atomic.Int32) {
+	t.Helper()
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer k" {
+			t.Errorf("bad request %s %v", r.URL.Path, r.Header)
+		}
+		if calls.Add(1) <= fail {
+			w.Header().Set("Retry-After-Ms", "10")
+			w.WriteHeader(status)
+			fmt.Fprint(w, body)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, c := range []string{
+			`{"choices":[{"index":0,"delta":{"content":"Hello from "}}]}`,
+			`{"choices":[{"index":0,"delta":{"content":"OpenAI."}}]}`,
+			`{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			`{"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":4}}}`,
+			`[DONE]`,
+		} {
+			fmt.Fprintf(w, "data: %s\n\n", c)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/v1", &calls
+}
+
+func TestOpenAITurnAndTrajectory(t *testing.T) {
+	url, _ := fakeOpenAI(t, 0, 0, "")
+	code, out, errOut := flores(t, "-p", "hi", "--provider", "openai", "--base-url", url, "--model", "m", "--api-key", "k")
+	if code != exitOK || out != "Hello from OpenAI.\n" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	code, out, _ = flores(t, "-p", "hi", "--provider", "openai", "--output", "jsonl", "--base-url", url, "--model", "m", "--api-key", "k")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var start, end map[string]any
+	_ = json.Unmarshal([]byte(lines[0]), &start)
+	_ = json.Unmarshal([]byte(lines[len(lines)-1]), &end)
+	usage, _ := end["usage"].(map[string]any)
+	prov, _ := start["provider"].(map[string]any)
+	if code != exitOK || prov["protocol"] != "openai-chat" || prov["name"] != "openai" ||
+		usage["input_tokens"] != float64(5) || usage["cache_read_tokens"] != float64(4) {
+		t.Fatalf("exit %d\nstart %v\nend %v", code, start, end)
+	}
+}
+
+func TestOpenAIRetriesAServerError(t *testing.T) {
+	url, calls := fakeOpenAI(t, 1, http.StatusServiceUnavailable, `{"error":{"message":"busy","type":"server_error"}}`)
+	code, out, errOut := flores(t, "-p", "hi", "--provider", "openai", "--base-url", url, "--model", "m", "--api-key", "k")
+	if code != exitOK || out != "Hello from OpenAI.\n" || calls.Load() != 2 || !strings.Contains(errOut, "retrying in 10ms") {
+		t.Fatalf("exit %d, %d calls, stdout %q, stderr %q", code, calls.Load(), out, errOut)
+	}
+}
+
+func TestOutOfCreditFailsAtOnce(t *testing.T) {
+	url, calls := fakeOpenAI(t, 100, http.StatusTooManyRequests,
+		`{"error":{"message":"You exceeded your current quota.","type":"insufficient_quota","code":"insufficient_quota"}}`)
+	code, _, errOut := flores(t, "-p", "hi", "--provider", "openai", "--base-url", url, "--model", "m", "--api-key", "k")
+	if code != exitProvider || calls.Load() != 1 || strings.Contains(errOut, "retrying") || !strings.Contains(errOut, "no credit") {
+		t.Fatalf("exit %d, %d calls, stderr %q", code, calls.Load(), errOut)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 func TestRetryable(t *testing.T) {
 	cases := map[ErrorKind]bool{
 		ErrNetwork: true, ErrRateLimit: true, ErrOverloaded: true, ErrTruncated: true,
-		ErrAuth: false, ErrBadRequest: false, ErrInvalidResponse: false,
+		ErrAuth: false, ErrQuota: false, ErrBadRequest: false, ErrInvalidResponse: false,
 	}
 	for kind, want := range cases {
 		if got := (&Error{Kind: kind}).Retryable(); got != want {
@@ -25,5 +25,11 @@ func TestErrorMessageAndUnwrap(t *testing.T) {
 	}
 	if !errors.Is(err, io.EOF) {
 		t.Error("errors.Is should see the wrapped error")
+	}
+}
+
+func TestQuotaIsNeverRetried(t *testing.T) {
+	if (&Error{Kind: ErrQuota, Retry: RetryYes}).Retryable() {
+		t.Error("no credit left is not fixed by retrying, even if the provider says so")
 	}
 }

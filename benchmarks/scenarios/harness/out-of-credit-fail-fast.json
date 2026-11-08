@@ -1,0 +1,33 @@
+{
+  "name": "out-of-credit-fail-fast",
+  "title": "Sin saldo: fallar rápido y sin reintentos",
+  "category": "provider-errors",
+  "why": "Sin crédito, reintentar no arregla nada. OpenAI lo responde con un 429, el mismo código que «demasiadas peticiones», así que un agente que mira solo el código HTTP espera y reintenta para nada. Solo el cuerpo (code: insufficient_quota) lo distingue. En Anthropic llega como un 400 «credit balance is too low».",
+  "prompt": "Say something.",
+  "timeout_s": 60,
+  "mock": {
+    "steps": [
+      {
+        "error": {
+          "status": 429,
+          "type": "insufficient_quota",
+          "code": "insufficient_quota",
+          "message": "You exceeded your current quota, please check your plan and billing details. (mock)",
+          "anthropic": {
+            "status": 400,
+            "type": "invalid_request_error",
+            "message": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits. (mock)"
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "exit": "nonzero",
+    "llm_requests": {
+      "min": 1,
+      "max": 1
+    },
+    "max_wall_ms": 5000
+  }
+}

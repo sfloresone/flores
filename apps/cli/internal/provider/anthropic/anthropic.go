@@ -9,9 +9,7 @@ import (
 	"iter"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sfloresone/flores/apps/cli/internal/provider"
 )
@@ -86,7 +84,7 @@ func (c *Client) Stream(ctx context.Context, req provider.Request) iter.Seq2[pro
 		}
 		resp, err := c.http.Do(httpReq)
 		if err != nil {
-			yield(provider.Event{}, transportError(ctx, err))
+			yield(provider.Event{}, provider.TransportError(ctx, err))
 			return
 		}
 		defer resp.Body.Close()
@@ -201,15 +199,11 @@ func toBlocks(parts []provider.Part) []wireBlock {
 
 // ------------------------------------------------------------------ errors
 
-func transportError(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	return &provider.Error{Kind: provider.ErrNetwork, Err: err}
-}
-
 func httpError(status int, header http.Header, body []byte) *provider.Error {
-	e := &provider.Error{Status: status, RetryAfter: retryAfter(header), Retry: shouldRetry(header)}
+	e := &provider.Error{
+		Kind: provider.KindForStatus(status), Status: status,
+		RetryAfter: provider.RetryAfter(header), Retry: provider.ShouldRetry(header),
+	}
 	var parsed struct {
 		Error struct {
 			Type    string `json:"type"`
@@ -221,49 +215,10 @@ func httpError(status int, header http.Header, body []byte) *provider.Error {
 	} else {
 		e.Message = strings.TrimSpace(string(body))
 	}
-	switch {
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		e.Kind = provider.ErrAuth
-	case status == http.StatusTooManyRequests:
-		e.Kind = provider.ErrRateLimit
-	case status == http.StatusRequestTimeout:
-		e.Kind = provider.ErrNetwork
-	case status == http.StatusConflict: // a lock or a race on their side; the official SDKs retry it
-		e.Kind = provider.ErrOverloaded
-	case status >= 500: // includes Anthropic's 529 "overloaded"
-		e.Kind = provider.ErrOverloaded
-	default:
-		e.Kind = provider.ErrBadRequest
+	// An empty account is a 400 here (not a 429 as in OpenAI). It was never
+	// retried; naming it lets the CLI say what to do about it.
+	if e.Kind == provider.ErrBadRequest && strings.Contains(strings.ToLower(e.Message), "credit balance") {
+		e.Kind = provider.ErrQuota
 	}
 	return e
-}
-
-// retryAfter reads the wait the provider asks for: retry-after-ms (more
-// precise) first, then Retry-After in seconds or as an HTTP date.
-func retryAfter(h http.Header) time.Duration {
-	if ms, err := strconv.ParseFloat(h.Get("Retry-After-Ms"), 64); err == nil && ms > 0 {
-		return time.Duration(ms * float64(time.Millisecond))
-	}
-	v := h.Get("Retry-After")
-	if v == "" {
-		return 0
-	}
-	if s, err := strconv.ParseFloat(v, 64); err == nil && s >= 0 {
-		return time.Duration(s * float64(time.Second))
-	}
-	if t, err := http.ParseTime(v); err == nil {
-		return max(0, time.Until(t))
-	}
-	return 0
-}
-
-// shouldRetry reads x-should-retry, the provider's explicit advice.
-func shouldRetry(h http.Header) provider.RetryHint {
-	switch strings.ToLower(h.Get("X-Should-Retry")) {
-	case "true":
-		return provider.RetryYes
-	case "false":
-		return provider.RetryNo
-	}
-	return provider.RetryUnset
 }

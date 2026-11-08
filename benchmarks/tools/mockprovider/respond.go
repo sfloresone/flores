@@ -116,6 +116,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // ---------------------------------------------------------------- errors
 
 func writeError(w http.ResponseWriter, proto Protocol, e *StepError) {
+	if proto == ProtoAnthropic && e.Anthropic != nil {
+		e = e.Anthropic
+	}
 	typ := e.Type
 	if typ == "" {
 		typ = "api_error"
@@ -127,8 +130,12 @@ func writeError(w http.ResponseWriter, proto Protocol, e *StepError) {
 		})
 		return
 	}
+	var code any
+	if e.Code != "" {
+		code = e.Code
+	}
 	writeJSON(w, e.Status, map[string]any{
-		"error": map[string]any{"message": e.Message, "type": typ, "code": nil, "param": nil},
+		"error": map[string]any{"message": e.Message, "type": typ, "code": code, "param": nil},
 	})
 }
 
@@ -155,9 +162,9 @@ func chatFinish(r *reply) string {
 
 func chatUsage(r *reply) map[string]any {
 	return map[string]any{
-		"prompt_tokens":         r.usage.InputTokens,
+		"prompt_tokens":         r.usage.InputTokens + r.usage.CacheReadTokens, // includes cached, like the real API
 		"completion_tokens":     r.usage.OutputTokens,
-		"total_tokens":          r.usage.InputTokens + r.usage.OutputTokens,
+		"total_tokens":          r.usage.InputTokens + r.usage.CacheReadTokens + r.usage.OutputTokens,
 		"prompt_tokens_details": map[string]any{"cached_tokens": r.usage.CacheReadTokens},
 	}
 }
@@ -336,11 +343,11 @@ func responsesItems(r *reply, status string) []map[string]any {
 
 func responsesUsage(r *reply) map[string]any {
 	return map[string]any{
-		"input_tokens":          r.usage.InputTokens,
+		"input_tokens":          r.usage.InputTokens + r.usage.CacheReadTokens, // includes cached, like the real API
 		"input_tokens_details":  map[string]any{"cached_tokens": r.usage.CacheReadTokens},
 		"output_tokens":         r.usage.OutputTokens,
 		"output_tokens_details": map[string]any{"reasoning_tokens": 0},
-		"total_tokens":          r.usage.InputTokens + r.usage.OutputTokens,
+		"total_tokens":          r.usage.InputTokens + r.usage.CacheReadTokens + r.usage.OutputTokens,
 	}
 }
 

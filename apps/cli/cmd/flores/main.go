@@ -24,6 +24,7 @@ import (
 	"github.com/sfloresone/flores/apps/cli/internal/agent"
 	"github.com/sfloresone/flores/apps/cli/internal/provider"
 	"github.com/sfloresone/flores/apps/cli/internal/provider/anthropic"
+	"github.com/sfloresone/flores/apps/cli/internal/provider/openai"
 	"github.com/sfloresone/flores/apps/cli/internal/trajectory"
 )
 
@@ -51,15 +52,19 @@ Usage:
 Flags:
   -p, --prompt TEXT     the task
   --output MODE         text (default) or jsonl (trajectory/v1 events on stdout)
-  --model ID            model id                (env FLORES_MODEL)
+  --provider NAME       anthropic (default) or openai; openai also covers
+                        compatible servers (Ollama, vLLM, OpenRouter...)
+                                                 (env FLORES_PROVIDER)
+  --model ID            model id                 (env FLORES_MODEL)
   --base-url URL        provider base URL        (env FLORES_BASE_URL)
-  --api-key KEY         API key                  (env FLORES_API_KEY or ANTHROPIC_API_KEY)
+                        e.g. http://localhost:11434/v1 for Ollama
+  --api-key KEY         API key                  (env FLORES_API_KEY, else
+                        ANTHROPIC_API_KEY or OPENAI_API_KEY)
   --max-steps N         stop after N model calls; 0 = no limit (default 0)
   --max-retries N       resend a call that failed transiently up to N times;
                         0 = never (default 6, env FLORES_MAX_RETRIES)
   --timeout DUR         overall timeout, e.g. 10m; 0 = none (default 0)
 
-Provider: env FLORES_PROVIDER (only "anthropic" for now).
 Exit codes: 0 success, 2 usage, 3 provider error or timeout,
             4 stopped by a brake (step limit or repeated tool call), 130 cancelled.
 `
@@ -100,12 +105,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	policy := provider.DefaultRetryPolicy()
 	policy.MaxRetries = opts.maxRetries
-	p := provider.WithRetry(anthropic.New(anthropic.Config{
-		BaseURL:    opts.baseURL,
-		APIKey:     opts.apiKey,
-		UserAgent:  "flores/" + version,
-		HTTPClient: &http.Client{}, // one client: the connection is reused across steps
-	}), policy)
+	vendor := providers[opts.providerName]
+	p := provider.WithRetry(vendor.new(opts), policy)
 	a := agent.New(p, agent.Config{Model: opts.model, System: systemPrompt, MaxSteps: opts.maxSteps})
 
 	var res *agent.Result
@@ -113,8 +114,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		cwd, _ := os.Getwd()
 		em := trajectory.New(stdout, trajectory.Session{
 			AgentName: "flores", AgentVersion: version, Model: opts.model,
-			ProviderName: opts.providerName, Protocol: "anthropic-messages",
-			BaseURL: cmp.Or(opts.baseURL, anthropic.DefaultBaseURL), Cwd: cwd,
+			ProviderName: opts.providerName, Protocol: vendor.protocol,
+			BaseURL: cmp.Or(opts.baseURL, vendor.baseURL), Cwd: cwd,
 		})
 		for ev := range a.Run(ctx, opts.prompt) {
 			em.Record(ev)
@@ -128,6 +129,36 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return report(res, opts, stderr)
 }
 
+// vendor is one provider flores can talk to. Adding a provider is a new
+// adapter package and one entry here (ADR 0002).
+type vendor struct {
+	protocol string // trajectory session.start "protocol"
+	baseURL  string // default base URL
+	keyEnv   string // the vendor's own API key variable
+	new      func(options) provider.Provider
+}
+
+var providers = map[string]vendor{
+	"anthropic": {
+		protocol: "anthropic-messages", baseURL: anthropic.DefaultBaseURL, keyEnv: "ANTHROPIC_API_KEY",
+		new: func(o options) provider.Provider {
+			return anthropic.New(anthropic.Config{
+				BaseURL: o.baseURL, APIKey: o.apiKey, UserAgent: "flores/" + version,
+				HTTPClient: &http.Client{}, // one client: the connection is reused across steps
+			})
+		},
+	},
+	"openai": {
+		protocol: "openai-chat", baseURL: openai.DefaultBaseURL, keyEnv: "OPENAI_API_KEY",
+		new: func(o options) provider.Provider {
+			return openai.New(openai.Config{
+				BaseURL: o.baseURL, APIKey: o.apiKey, UserAgent: "flores/" + version,
+				HTTPClient: &http.Client{},
+			})
+		},
+	},
+}
+
 func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool) {
 	var o options
 	fs := flag.NewFlagSet("flores", flag.ContinueOnError)
@@ -137,7 +168,8 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 	fs.StringVar(&o.output, "output", "text", "")
 	fs.StringVar(&o.model, "model", os.Getenv("FLORES_MODEL"), "")
 	fs.StringVar(&o.baseURL, "base-url", os.Getenv("FLORES_BASE_URL"), "")
-	fs.StringVar(&o.apiKey, "api-key", cmp.Or(os.Getenv("FLORES_API_KEY"), os.Getenv("ANTHROPIC_API_KEY")), "")
+	fs.StringVar(&o.apiKey, "api-key", "", "")
+	fs.StringVar(&o.providerName, "provider", cmp.Or(os.Getenv("FLORES_PROVIDER"), "anthropic"), "")
 	fs.IntVar(&o.maxSteps, "max-steps", 0, "")
 	defaultRetries := provider.DefaultRetryPolicy().MaxRetries
 	if v := os.Getenv("FLORES_MAX_RETRIES"); v != "" {
@@ -164,7 +196,12 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 	if o.version {
 		return o, 0, true
 	}
-	o.providerName = cmp.Or(os.Getenv("FLORES_PROVIDER"), "anthropic")
+	vendor, known := providers[o.providerName]
+	if known {
+		// The key is looked up once the provider is known, so an
+		// ANTHROPIC_API_KEY is never sent to OpenAI or the other way round.
+		o.apiKey = cmp.Or(o.apiKey, os.Getenv("FLORES_API_KEY"), os.Getenv(vendor.keyEnv))
+	}
 	if o.prompt == "" && fs.NArg() > 0 {
 		o.prompt = strings.Join(fs.Args(), " ")
 	}
@@ -178,12 +215,12 @@ func parse(args []string, stdin io.Reader, stderr io.Writer) (options, int, bool
 		problem = "empty prompt: pass -p TEXT or pipe it on stdin"
 	case o.output != "text" && o.output != "jsonl":
 		problem = "--output must be text or jsonl"
-	case o.providerName != "anthropic":
-		problem = fmt.Sprintf("unknown provider %q (FLORES_PROVIDER): only \"anthropic\" exists so far", o.providerName)
+	case !known:
+		problem = fmt.Sprintf("unknown provider %q (--provider or FLORES_PROVIDER): use anthropic or openai", o.providerName)
 	case o.model == "":
 		problem = "no model: pass --model or set FLORES_MODEL"
 	case o.apiKey == "":
-		problem = "no API key: pass --api-key or set FLORES_API_KEY / ANTHROPIC_API_KEY"
+		problem = fmt.Sprintf("no API key: pass --api-key or set FLORES_API_KEY / %s", vendor.keyEnv)
 	case o.maxSteps < 0:
 		problem = "--max-steps must be >= 0 (0 = no limit)"
 	case o.maxRetries < 0:
@@ -254,8 +291,13 @@ func report(res *agent.Result, opts options, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error:", res.Err)
 	}
 	var pe *provider.Error
-	if errors.As(res.Err, &pe) && pe.Kind == provider.ErrAuth {
-		fmt.Fprintln(stderr, "hint: check the API key (FLORES_API_KEY or ANTHROPIC_API_KEY)")
+	if errors.As(res.Err, &pe) {
+		switch pe.Kind {
+		case provider.ErrAuth:
+			fmt.Fprintf(stderr, "hint: check the API key (FLORES_API_KEY or %s)\n", providers[opts.providerName].keyEnv)
+		case provider.ErrQuota:
+			fmt.Fprintln(stderr, "hint: the account has no credit or quota left; top it up, then run again")
+		}
 	}
 	return exitProvider
 }

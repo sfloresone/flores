@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,7 +57,7 @@ func readStream(ctx context.Context, body io.Reader, yield func(provider.Event, 
 		rawStop string
 		tools   = map[int]*toolBlock{}
 	)
-	err := readSSE(body, func(data []byte) (bool, error) {
+	err := provider.ReadSSE(body, func(data []byte) (bool, error) {
 		var ev streamEvent
 		if err := json.Unmarshal(data, &ev); err != nil {
 			return false, &provider.Error{Kind: provider.ErrInvalidResponse, Err: err}
@@ -138,84 +137,6 @@ func readStream(ctx context.Context, body io.Reader, yield func(provider.Event, 
 		}
 		yield(provider.Event{}, pe)
 	}
-}
-
-// errNoStop marks a stream that ended without message_stop.
-var errNoStop = errors.New("stream ended before message_stop")
-
-// readSSE calls handle with the data of each server-sent event until handle
-// returns false or the stream ends. Lines can be any length: a single text
-// delta may be megabytes long (layer B: huge-output).
-func readSSE(body io.Reader, handle func(data []byte) (bool, error)) error {
-	r := bufio.NewReaderSize(body, 64<<10)
-	var (
-		data    []byte
-		pending bool // a data: line was seen since the last dispatch
-	)
-	for {
-		line, err := r.ReadSlice('\n')
-		if errors.Is(err, bufio.ErrBufferFull) {
-			// Longer than the buffer: keep reading the rest of the line.
-			long := append([]byte(nil), line...)
-			for errors.Is(err, bufio.ErrBufferFull) {
-				line, err = r.ReadSlice('\n')
-				long = append(long, line...)
-			}
-			line = long
-		}
-		if err != nil && !(errors.Is(err, io.EOF) && len(line) > 0) {
-			if errors.Is(err, io.EOF) {
-				return errNoStop
-			}
-			return err
-		}
-		line = trimEOL(line)
-		switch {
-		case len(line) == 0: // a blank line ends the event
-			if !pending {
-				continue
-			}
-			more, herr := handle(data)
-			data, pending = data[:0], false
-			if herr != nil || !more {
-				return herr
-			}
-		case line[0] == ':': // comment
-		default:
-			if v, ok := field(line, "data"); ok {
-				if pending {
-					data = append(data, '\n')
-				}
-				data, pending = append(data, v...), true
-			}
-			// "event:", "id:" and "retry:" are not needed.
-		}
-		if errors.Is(err, io.EOF) {
-			return errNoStop
-		}
-	}
-}
-
-func trimEOL(b []byte) []byte {
-	if n := len(b); n > 0 && b[n-1] == '\n' {
-		b = b[:n-1]
-	}
-	if n := len(b); n > 0 && b[n-1] == '\r' {
-		b = b[:n-1]
-	}
-	return b
-}
-
-// field returns the value of "name: value" (one optional space after ':').
-func field(line []byte, name string) ([]byte, bool) {
-	if len(line) <= len(name) || string(line[:len(name)]) != name || line[len(name)] != ':' {
-		return nil, false
-	}
-	v := line[len(name)+1:]
-	if len(v) > 0 && v[0] == ' ' {
-		v = v[1:]
-	}
-	return v, true
 }
 
 func usageOf(u wireUsage) provider.Usage {

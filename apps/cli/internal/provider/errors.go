@@ -18,6 +18,7 @@ const (
 	ErrBadRequest                           // the request itself is wrong (400, 404, 413…)
 	ErrTruncated                            // the stream ended before the provider finished
 	ErrInvalidResponse                      // the provider sent something we cannot parse
+	ErrQuota                                // no credit or quota left (OpenAI 429 insufficient_quota, 402)
 )
 
 func (k ErrorKind) String() string {
@@ -36,6 +37,8 @@ func (k ErrorKind) String() string {
 		return "truncated"
 	case ErrInvalidResponse:
 		return "invalid_response"
+	case ErrQuota:
+		return "quota"
 	}
 	return "unknown"
 }
@@ -80,10 +83,11 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.Err }
 
 // Retryable reports whether sending the same request again can succeed.
-// Auth errors never fix themselves, whatever the provider says (layer B:
-// auth-error-fail-fast; ADR 0004). Otherwise the provider's hint wins.
+// A bad key or an empty account never fixes itself, whatever the provider
+// says (layer B: auth-error-fail-fast, out-of-credit-fail-fast; ADR 0004 and
+// 0005). Otherwise the provider's hint wins.
 func (e *Error) Retryable() bool {
-	if e.Kind == ErrAuth {
+	if e.Kind == ErrAuth || e.Kind == ErrQuota {
 		return false
 	}
 	if e.Retry != RetryUnset {

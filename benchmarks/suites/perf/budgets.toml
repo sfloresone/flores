@@ -19,6 +19,16 @@
 "rss_mb.p50" = 15.0
 "request_bytes.p50" = 4096
 
+# flores-openai is the same binary speaking Chat Completions: same limits.
+[perf-startup.flores-openai]
+"wall_ms.p50" = 5.0
+"rss_mb.p50" = 12.0
+
+[perf-hello.flores-openai]
+"wall_ms.p50" = 50.0
+"rss_mb.p50" = 15.0
+"request_bytes.p50" = 4096
+
 [perf-startup.flores-stub]
 "wall_ms.p50" = 5.0
 "rss_mb.p50" = 12.0  # measured 5.6 MiB on Linux with tools/measure (floor ~2.4)
@@ -35,12 +45,23 @@
 [harness.flores]
 # runaway-tool-loop passes with no step limit thanks to repetition detection
 # (ADR 0003); the *-recover scenarios and retry-after-too-long thanks to
-# retries (ADR 0004). M2 adds the tool scenarios.
+# retries (ADR 0004); out-of-credit-fail-fast thanks to ErrQuota (ADR 0005).
+# M2 adds the tool scenarios.
 must_pass = [
   "basic-text", "unknown-tool", "auth-error-fail-fast", "runaway-tool-loop",
   "malformed-tool-args", "huge-output", "slow-first-token",
   "rate-limit-recover", "server-error-recover", "stream-truncated-recover",
-  "retry-after-too-long",
+  "retry-after-too-long", "out-of-credit-fail-fast",
+]
+
+# Same binary, other protocol (ADR 0005): the same list, so neither adapter
+# can fall behind the other.
+[harness.flores-openai]
+must_pass = [
+  "basic-text", "unknown-tool", "auth-error-fail-fast", "runaway-tool-loop",
+  "malformed-tool-args", "huge-output", "slow-first-token",
+  "rate-limit-recover", "server-error-recover", "stream-truncated-recover",
+  "retry-after-too-long", "out-of-credit-fail-fast",
 ]
 
 [harness.flores-stub]

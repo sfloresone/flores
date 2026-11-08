@@ -90,8 +90,18 @@ type StepError struct {
 	Status  int    `json:"status"`
 	Type    string `json:"type,omitempty"`
 	Message string `json:"message"`
+	// Code is sent as error.code in the OpenAI shapes (null when empty).
+	Code string `json:"code,omitempty"`
+	// Anthropic, when set, is how the same failure looks in the Messages
+	// API. Some failures differ by vendor: no credit left is a 429
+	// insufficient_quota in OpenAI and a 400 "credit balance is too low" in
+	// Anthropic.
+	Anthropic *StepError `json:"anthropic,omitempty"`
 }
 
+// Usage is what a step reports. InputTokens is the input that was not
+// cached, as the Messages API reports it; the OpenAI shapes add
+// CacheReadTokens to their input total, as the real APIs do.
 type Usage struct {
 	InputTokens     int `json:"input_tokens,omitempty"`
 	OutputTokens    int `json:"output_tokens,omitempty"`
