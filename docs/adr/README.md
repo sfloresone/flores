@@ -17,6 +17,7 @@ por qué flores es como es, sin tener que reconstruir la conversación.
 | [0003](0003-bucle-del-agente.md) | El bucle del agente: turnos, pasos y frenos | Aceptada |
 | [0004](0004-reintentos.md) | Reintentos de las llamadas al modelo | Aceptada |
 | [0005](0005-adaptador-openai.md) | Adaptador OpenAI (Chat Completions) | Aceptada |
+| [0006](0006-tools.md) | Las tools: propias, seis, y lecturas en paralelo | Aceptada |
 
 Plantilla: copia un ADR existente y mantén las secciones *Contexto*, *Decisión*,
 *Por qué*, *Alternativas descartadas* y *Cómo se valida*.

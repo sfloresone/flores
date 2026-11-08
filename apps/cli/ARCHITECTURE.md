@@ -6,12 +6,14 @@ Este documento sigue una petición de principio a fin. Las decisiones están en
 los ADR: [0001](../../docs/adr/0001-estructura-y-estilo-go.md) (estructura),
 [0002](../../docs/adr/0002-interfaz-provider.md) (proveedor),
 [0003](../../docs/adr/0003-bucle-del-agente.md) (bucle),
-[0004](../../docs/adr/0004-reintentos.md) (reintentos) y
-[0005](../../docs/adr/0005-adaptador-openai.md) (adaptador OpenAI).
+[0004](../../docs/adr/0004-reintentos.md) (reintentos),
+[0005](../../docs/adr/0005-adaptador-openai.md) (adaptador OpenAI) y
+[0006](../../docs/adr/0006-tools.md) (tools).
 
-Estado: **hito M1** (M1a + M1b). Hay bucle, dos proveedores (Anthropic y
-OpenAI Chat Completions, que también cubre los servidores compatibles) y
-reintentos, pero todavía no hay tools.
+Estado: **hito M2**. Hay bucle, dos proveedores (Anthropic y OpenAI Chat
+Completions, que también cubre los servidores compatibles), reintentos y seis
+tools: `bash`, `read`, `edit`, `write`, `grep` y `glob`. Todavía no hay
+permisos: `flores -p` ejecuta lo que pida el modelo (`--no-tools` lo apaga).
 
 ## Los paquetes
 
@@ -22,6 +24,7 @@ reintentos, pero todavía no hay tools.
 | `internal/provider` | Tipos propios (`Message`, `Request`, `Event`, `Error`), la interfaz `Provider`, los reintentos (`RetryPolicy`, `WithRetry`) y lo que comparten los adaptadores HTTP: el lector SSE (`ReadSSE`) y la lectura de errores (`KindForStatus`, `RetryAfter`, `ShouldRetry`). | Conocer a ningún proveedor concreto. |
 | `internal/provider/anthropic` | El protocolo Messages API con `net/http`: cuerpo, cabeceras, eventos SSE y errores. | Reintentar o decidir qué hacer con las tools. |
 | `internal/provider/openai` | El protocolo Chat Completions, igual: sirve para OpenAI y para cualquier servidor compatible (Ollama, vLLM, OpenRouter…) cambiando la base URL. | Lo mismo. |
+| `internal/tool` | Las tools: un `struct Tool` por tool (nombre, descripción, esquema JSON escrito a mano, `ReadOnly`, `Run`) y `Set`, que las reúne, resuelve los errores comunes y agrupa las llamadas de un paso. | Hablar con el modelo, decidir cuándo acaba el turno, pedir permiso. |
 | `internal/trajectory` | Traduce los eventos del agente a `trajectory/v1` (JSONL). | Decidir nada sobre la ejecución. |
 
 ## El recorrido de `flores -p "Say hello."`
@@ -32,12 +35,16 @@ reintentos, pero todavía no hay tools.
      reutilice entre pasos. La tabla `providers` dice, para cada uno, su
      adaptador, su protocolo, su base URL y su variable de clave
      (`ANTHROPIC_API_KEY` u `OPENAI_API_KEY`);
-   - un `agent.Agent` con el modelo, el system prompt y `MaxSteps` (0 = sin límite).
+   - las tools (`tool.Defaults()`), que trabajan en la carpeta actual, y una
+     carpeta temporal para las salidas largas de `bash`;
+   - un `agent.Agent` con el modelo, el system prompt (que incluye la carpeta
+     de trabajo y el sistema operativo), las tools y `MaxSteps` (0 = sin límite).
 2. **`Agent.Run(ctx, prompt)`** añade el mensaje del usuario al historial y
    empieza un **turno**. Devuelve un iterador de eventos; el último siempre es
    `EventDone`, con el resultado.
 3. **Cada paso** (`turn.step`):
-   - construye un `provider.Request` con todo el historial;
+   - construye un `provider.Request` con todo el historial y las definiciones
+     de las tools (las mismas en cada paso);
    - recorre `provider.Stream(...)`: `EventSent` (bytes enviados), `EventTextDelta`
      (texto según llega), `EventToolCall` (llamadas completas) y `EventDone`
      (tokens y motivo de parada);
@@ -62,9 +69,19 @@ reintentos, pero todavía no hay tools.
    El paso descarta el texto parcial del intento fallido, y el historial solo
    guarda la respuesta buena. Un 401 y una cuenta sin saldo nunca se
    reintentan.
-5. **Si el modelo pidió tools**, `runTools` las responde. En M0 todas devuelven
-   el error `unknown tool`. Los resultados se añaden al historial y el bucle
-   vuelve al paso 3.
+5. **Si el modelo pidió tools**, `runTools` las responde:
+   - `Set.Groups` agrupa las llamadas: las lecturas seguidas (`read`, `grep`,
+     `glob`) van juntas y se ejecutan a la vez; `bash`, `edit` y `write` van
+     solas;
+   - `Set.RunGroup` ejecuta cada grupo con el `ctx` del turno, así que Ctrl-C
+     o `--timeout` paran un comando en marcha;
+   - `Set.Run` resuelve lo común: tool desconocida, argumentos inválidos (con
+     el esquema esperado), `panic` y un tope de 64 KB;
+   - si la respuesta se cortó por `max_tokens`, no se ejecuta nada y cada
+     llamada recibe un error que pide repetirla.
+
+   Los resultados se añaden al historial **en el orden de las llamadas** y el
+   bucle vuelve al paso 3.
 6. **Los frenos** (`guard.go`) actúan tras cada paso con tools:
    - `--max-steps N`, si se ha puesto;
    - la detección de repeticiones: la misma llamada con el mismo resultado
